@@ -514,7 +514,7 @@ proc rosterJson(sim: SimServer): JsonNode =
 
 const
   FpColumns = 96              ## raycast columns per first-person frame.
-  FpMarchStep = 2.0           ## px per wall-march step (fine enough at 1235px).
+  # (the per-column march moved to egoview.marchRays, which owns the step)
   FpEntFovMarginBrads = 8.0   ## let a sprite straddling the cone edge still show.
   FpMapCell = 7               ## px per minimap wall-silhouette cell (~176x94 grid).
   FpShotSamples = 14          ## points sampled along a beam. The client draws the
