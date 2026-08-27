@@ -4164,7 +4164,10 @@ body[data-embed] #board { top: 0; height: 100%; }
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  top: calc(6 * var(--u));
+  /* UNDER the scorebug: #chrome's own box is inset 0, so the top band has to
+     be stepped over explicitly. --topband is what relayout() measured for the
+     scorebug strip, so this tracks it at every width. */
+  top: calc(var(--topband, 0px) + 6 * var(--u));
   display: flex;
   gap: calc(4 * var(--u));
   pointer-events: auto;
@@ -4407,7 +4410,7 @@ button.beat-marker {
       btn.className = 'dm-eye';
       btn.__slot = slot;
       var cv = document.createElement('canvas');
-      cv.width = 32; cv.height = 20;
+      cv.width = 32; cv.height = 24;
       var cap = document.createElement('span');
       cap.className = 'dm-eyecap';
       btn.appendChild(cv);
@@ -4439,8 +4442,8 @@ button.beat-marker {
     for (var i = 0; i < cols.length; i++) {
       var d = cols[i];
       if (!(d > 0)) continue;
-      var lit = Math.max(0.12, Math.min(1, 220 / d));
-      var slice = Math.max(1, Math.min(h, h * 60 / d));
+      var lit = Math.max(0.15, Math.min(1, 260 / d));
+      var slice = Math.max(2, Math.min(h, h * 140 / d));
       var base = team === 'red' ? [214, 96, 74] : [96, 148, 214];
       ctx.fillStyle = 'rgba(' +
         Math.round(base[0] * lit + 24) + ',' +
@@ -4600,6 +4603,62 @@ button.beat-marker {
     }
   }
 
+  // ---- the scorebug plates ------------------------------------------------
+  // The inherited plate markup is the starter's; its CONTENTS are this game's.
+  // This runs after the classic renderScorebug (the game block renders last),
+  // so it overwrites the hill chip, the numeral and the sub-line with the only
+  // three numbers that matter here: net frags, frags, deaths.
+  function renderPlates(s) {
+    var roster = s.roster || [];
+    var tot = {
+      red: { f: 0, d: 0, net: 0, up: 0, fb: 0 },
+      blue: { f: 0, d: 0, net: 0, up: 0, fb: 0 }
+    };
+    for (var i = 0; i < roster.length; i++) {
+      var r = roster[i];
+      if (!tot[r.team]) continue;
+      tot[r.team].f += r.k || 0;
+      tot[r.team].d += r.d || 0;
+      tot[r.team].net += (typeof r.net === 'number') ? r.net : 0;
+      if (r.alive) tot[r.team].up += 1;
+    }
+    var fallbacks = fallbackSeats(s);
+    ['red', 'blue'].forEach(function (team) {
+      var chip = $('hill-' + team);
+      if (chip) {
+        var net = tot[team].net;
+        chip.textContent = (net > 0 ? '+' : '') + net;
+        chip.title = 'Net frags: frags minus team kills minus deaths';
+        chip.classList.toggle('own', net > 0);
+      }
+      var num = $('lives-' + team);
+      if (num) num.textContent = String(tot[team].f);
+      var sub = $('tags-' + team);
+      if (sub) {
+        var glyph = '';
+        for (var j = 0; j < roster.length; j++) {
+          if (roster[j].team === team && fallbacks[roster[j].s]) {
+            glyph = ' <span class="dm-fb" title="this seat missed a call">' +
+              '\u21af</span>';
+            break;
+          }
+        }
+        sub.innerHTML = tot[team].d + ' deaths · ' + tot[team].up + ' up' + glyph;
+      }
+    });
+  }
+
+  // Which seats have taken a fallback so far, from the directive records the
+  // frame already carries.
+  var fallbackSeen = {};
+  function fallbackSeats(s) {
+    var records = s.directives || [];
+    for (var i = 0; i < records.length; i++) {
+      if (records[i].source === 'fallback') fallbackSeen[records[i].seat] = true;
+    }
+    return fallbackSeen;
+  }
+
   // ---- the per-frame chrome ----------------------------------------------
   function dmFrame(s, ctx, jumped) {
     CTX = ctx;
@@ -4607,6 +4666,7 @@ button.beat-marker {
     renderFragbug(s);
     renderEyes(s);
     dmDirectives(s);
+    renderPlates(s);
     // The plates carry the seat's net frags and a ↯ on any seat that has
     // taken a fallback; the clock caption carries both teams' frag/death
     // totals in words a casual spectator can read.
