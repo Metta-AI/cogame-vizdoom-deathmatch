@@ -75,9 +75,12 @@ proc newDeathmatchSim*(configJson: string): SimServer =
   config.update(configJson)
   result = initSimServer(config)
   result.gameEventLoggingEnabled = false
+  ## `closedRoster` is true, so a joining player takes the slot its token
+  ## names AND must match that slot's configured display name.
   for order in 0 ..< Seats:
-    discard result.addPlayer("policy" & $order, order, "t" & $order)
-    result.seatNames[order] = "policy" & $order
+    let name = "Cog" & $(order + 1)
+    discard result.addPlayer(name, order, "t" & $order)
+    result.seatNames[order] = name
   result.startGame()
 
 proc newDeathmatchSim*(): SimServer =
