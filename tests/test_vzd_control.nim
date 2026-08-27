@@ -2,7 +2,7 @@
 ## every tick, and a trigger that cannot cause friendly fire.
 
 import
-  std/[json, math, random, strutils, unicode, unittest],
+  std/[json, math, random, unicode, unittest],
   vzd_helpers
 
 const LegalIntents = [intHunt, intHold, intMoveTo, intFlank, intRetreat,
