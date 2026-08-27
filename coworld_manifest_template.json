@@ -1,0 +1,847 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/metta/main/packages/coworld/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "shooter",
+    "deathmatch",
+    "first-person",
+    "team",
+    "vizdoom"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "vizdoom-deathmatch",
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "description": "Eight cogs, four RED against four BLUE, in one walled arena with cover, glass windows, med kits and nothing to capture. Each cog carries a hitscan gun that kills in three hits and sees only what is inside its 90-degree forward cone (out to 1575px, walls blocking) or its 90px bubble - its aim carries its vision, so it sees where it points, not where it walks. Every 4.5 seconds each seat is handed a first-person report of its cog: a sixteen-ray depth strip across the cone, a labelled list of every contact in it with bearing and distance, its own health and fire clock, what it heard, and the scoreboard. The seat replies with ONE order - hunt, hold, move_to, flank, retreat or regroup, aimed at a lettered zone (A1..E3) or at a contact's alias - and a deterministic driver executes it tick by tick: it steers, it turns, and it pulls the trigger when a live enemy is in the cone, in range, with a clear line and no teammate in the bullet corridor. Kill an enemy, take a frag. Die, lose one. A team kill costs the killer a frag, which is what stops friendly fire from being a free way to deny one. After 108 seconds the two teams' net frags are compared and the margin is the score, with a 12-frag lead the maximum win and a level game an honest draw. This is the ViZDoom multiplayer benchmark's SHAPE - eight agents, one map, an egocentric observation, frags minus deaths - not a ZDoom port: what ViZDoom's depth and labels buffers carry, this game carries as text, on an engine that compiles to WebAssembly so every replay is a static file the browser re-simulates tick for tick.",
+    "owner": "daveey@softmax.com",
+    "runnable": {
+      "type": "game",
+      "image": "{{VIZDOOM_DEATHMATCH_IMAGE}}",
+      "run": [
+        "/bin/vizdoom-deathmatch"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-vizdoom-deathmatch/tree/main",
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/vizdoom-deathmatch/anthropic_api_key"
+      }
+    },
+    "config_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "description": "One connection token per player slot, indexed by slot. INJECTED BY THE RUNNER: never write a literal tokens array into a variant's game_config.",
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "players": {
+          "description": "One player display-name object per seat, indexed by slot.",
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "slots": {
+          "description": "Per-seat team assignment. Slot parity IS the team: red, blue, red, blue, ... so seats 0/2/4/6 are RED.",
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "team"
+            ],
+            "properties": {
+              "team": {
+                "type": "string",
+                "enum": [
+                  "red",
+                  "blue"
+                ]
+              }
+            }
+          }
+        },
+        "num_agents": {
+          "description": "Seats, and therefore cogs: one cog per seat.",
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 8,
+          "default": 8
+        },
+        "seed": {
+          "description": "Episode seed. Randomised per process when unset; the pool map, the home deal, the med-kit orbit and the aim-fuzz stream all derive from it before any seat connects.",
+          "type": "integer"
+        },
+        "mapPath": {
+          "description": "arena = the hand-tuned symmetric map; pool = drawn from the curated 20-seed pool by seed.",
+          "type": "string",
+          "enum": [
+            "arena",
+            "pool"
+          ]
+        },
+        "mapSize": {
+          "description": "Only standard is shipped: every board resolves to 1235x659, which is what lets the viewer drop the zoom bar and the minimap.",
+          "type": "string",
+          "enum": [
+            "standard"
+          ]
+        },
+        "mapPoolIndex": {
+          "description": "-1 = derive the pool entry from the seed.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "teams": {
+          "description": "Two, always. FFA is out of scope.",
+          "type": "integer",
+          "const": 2
+        },
+        "cogsPerTeam": {
+          "description": "One cog per seat.",
+          "type": "integer",
+          "const": 1
+        },
+        "minPlayers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "closedRoster": {
+          "description": "A joining player takes the slot its token names or is refused.",
+          "type": "boolean"
+        },
+        "lives": {
+          "description": "High enough that a wipe is unreachable: lives > maxTicks div (respawnTicks + 1).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "hitPoints": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "respawnTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gunRange": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fireCooldownTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fireWindupTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "aimTurnRate": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "visionConeDeg": {
+          "description": "HALF-angle: 45 is a 90 degree beam, ViZDoom's default horizontal FOV.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 180
+        },
+        "visionBubble": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "turnTicks": {
+          "description": "Ticks between decision turns; 108 = 4.5 s.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTicks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxGames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempt1Ms": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "retryMs": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "turnBudgetMs": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "turnSpacingMs": {
+          "description": "The CONFIGURED floor between batch starts; the floor actually used is max(this, ceil(60000 * llmSeats / 28)).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "wallClockBudgetSeconds": {
+          "description": "The engine's own hard stop; must stay inside 60% of the episode timeout.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 660
+        },
+        "lobbyJoinTimeoutTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "startWaitTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gameOverTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fastMode": {
+          "type": "boolean"
+        },
+        "showPlayerLabels": {
+          "description": "False in every variant: no in-board sprite may leak a real policy name.",
+          "type": "boolean"
+        },
+        "mapSpec": {
+          "description": "The resolved map document, pinned into the replay so an old replay renders the map it was played on.",
+          "type": "string"
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "results_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "names",
+        "scores",
+        "win",
+        "reason"
+      ],
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "team": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "number"
+          }
+        },
+        "win": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "endRule": {
+          "type": "string",
+          "enum": [
+            "full_time",
+            "wall_clock",
+            "sim_fault",
+            "host_error"
+          ]
+        },
+        "games": {
+          "type": "integer"
+        },
+        "frags": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "teamFrags": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "deaths": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "net": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "teamNet": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "margin": {
+          "type": "integer"
+        },
+        "damageDealt": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "damageTaken": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "shotsFired": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "shotsHit": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "medkits": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "longestStreak": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "map": {
+          "type": "string"
+        },
+        "policyKinds": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "string"
+          }
+        },
+        "crossPlay": {
+          "type": "boolean"
+        },
+        "llmTurns": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "fallbackTurns": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "ordersRejected": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "deadSeats": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "finalTick": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "stopDetail": {
+          "type": "string"
+        }
+      }
+    },
+    "protocols": {
+      "player": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-vizdoom-deathmatch/blob/main/docs/PROTOCOL.md"
+      },
+      "global": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-vizdoom-deathmatch/blob/main/docs/PROTOCOL.md"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "# cogame-vizdoom-deathmatch\n\n**Eight cogs. One walled arena. Frags minus deaths. Nobody is capturing\nanything — the only thing that happens in this game is that somebody shoots\nfirst.**\n\nFour RED against four BLUE, teams assigned by the server. Each cog carries a\nhitscan gun that kills in three hits, and sees only what is inside its **90°\nforward cone** (out to 1575 px, walls blocking) or its 90 px bubble. Your aim\ncarries your vision, so you see where you point, not where you walk.\n\nEvery four and a half seconds each seat is handed a first-person report of its\ncog — a sixteen-ray depth strip across the cone, a labelled list of every\ncontact in it with bearing and distance, its own health and ammo clock, what it\nheard, and the scoreboard — and gives that cog **one order**. A deterministic\ndriver executes the order tick by tick: it steers, it turns, and it pulls the\ntrigger when a live enemy is in the cone, in range, with a clear line and no\nteammate in the corridor. After 108 seconds the two teams' net frags are\ncompared and the margin is the score.\n\nThis is the ViZDoom multiplayer benchmark's *shape* — eight agents, one map, an\negocentric observation, frags − deaths — on an engine that compiles to\nWebAssembly, so the replay is a static file. It is **not** a ViZDoom/ZDoom\nport: no WAD, no containerised Doom, no raw pixel buffer. What ViZDoom's depth\nand labels buffers carry, this game carries as text.\n\n## A policy is just a prompt\n\nA champion here is a strategy paragraph. Both shipped champions are\n`PLAYER_PROMPT` policies on the same image as the two scripted baselines; the\nonly difference between a champion and a filler is an environment variable.\n\n```\n{\"intent\":\"hold\",\"at\":\"C2\",\"face\":[700,330],\n \"radio\":\"killbox is C2, I have the north angle\",\"notes\":\"re-issue unless hp 1\"}\n```\n\n- `intent` ∈ `hunt | hold | move_to | flank | retreat | regroup`\n- `at` is a zone id (`A1`…`E3`) or a contact's alias (`BLUE-delta`)\n- `say` (≤ 10 chars) is **shouted out loud** — both teams hear it within 247 px\n- `radio` (≤ 96 chars) reaches your three teammates only, next turn\n- Everything is repaired, never rejected: an unknown intent becomes `hunt`, an\n  unresolvable target falls back to `to`, and a reply that names no order keeps\n  last turn's.\n\n## Seats and policies\n\n| | |\n|---|---|\n| Seats | **8** (4v4), `num_agents: 8` in every variant and in the cert fixture |\n| Champions | `vzd-pointman`, `vzd-crossfire` — `PLAYER_PROMPT`, different prompts |\n| Baselines | `vzd-rusher`, `vzd-sentry` — `PLAYER_SCRIPTED=rusher\\|sentry` |\n| Image | one, `coworld-vizdoom-deathmatch`, env-switched |\n| Entrypoints | `/bin/vizdoom-deathmatch` (game), `/bin/vizdoom-deathmatch-player` (seat) |\n\nThe LLM call is made by the **game** pod, not the player pod: the anthropic key\nis injected as `game.runnable.env.ANTHROPIC_API_KEY_URI`. A seat with no\ncredentials at all still plays — it falls back to `rusher` instantly, with no\nnetwork wait, so offline certification finishes in seconds.\n\n## Variants\n\n| Variant | Map |\n|---|---|\n| `arena` | the hand-tuned symmetric arena, identical every episode |\n| `pool` | a map drawn from the curated twenty-seed terrain pool by the episode seed, pinned into the replay so an old replay always renders the map it was played on |\n\nBoth are 1235 × 659, both 24 turns of 108 ticks, both `frags − deaths`.\n\n## Watching it\n\nThe replay is a **static wasm bundle**, never a pod: `tools/build_replay_viewer.sh`\ncompiles the *same* Nim sim module to WebAssembly through emscripten, and the\nbrowser re-simulates the episode from the recorded per-tick input masks,\nchecking a `gameHash` on every tick.\n\nThe viewer draws every cog's vision cone as a translucent wedge clipped exactly\nthe way the sim clips it — without them a spectator sees eight dots wander —\nplus eight first-person raycast thumbnails (`#eyes`, click one for the big POV\ninset), the kill feed in plain language, the frag-margin momentum graph, and a\nscrubber whose beats are labelled clickable buttons for `gamestart`, `kill`,\n`streak`, `lead`, `fallback` and `gameover`.\n\n## Repo map\n\n```\nsrc/vizdoom_deathmatch.nim         the game server entrypoint\nsrc/vizdoom_deathmatch_player.nim  the thin seat registrar\nsrc/vzd/                           the sim, the server, the commander layer\n  sim.nim          re-exports the sim modules; owns the tick loop\n  deathmatch.nim   the objective layer: net, teamNet, margin, the lead\n  zones.nim        the 5 x 3 lettered zone grid\n  egoview.nim      marchRays + the seat's observation (the ONE ray march)\n  decide.nim       one parallel batch per turn, the deadlines, the guards\n  directives.nim   the reply schema, tolerant parsing, rune truncation\n  baselines.nim    rusher and sentry\n  control.nim      the driver: nav, aim and the trigger rule\nclient/                            the broadcast chrome (inherited + a game block)\nreplay-viewer/                     the wasm entry and the static shell\ntools/ci/                          docker smoke, viewer smoke, policies, versions\ndocs/                              RULES.md, OBSERVATION.md, PROTOCOL.md\ndocs/plans/                        the accepted design note\n```\n\n## Building and testing\n\nEverything that needs Docker, Nim or emsdk runs in GitHub Actions\n(`.github/workflows/ci.yml`): the Nim test suite in debug and release, a\nraw-Docker episode smoke with the certification fixture's seat mix, and the\nwasm bundle opened in headless chromium against the replay that smoke produced.\n\n```bash\nnim c -r tests/tests.nim                          # the whole suite, from the repo root\n./tools/ci/docker_smoke.sh coworld-vizdoom-deathmatch:ci\n./tools/build_replay_viewer.sh \"$PWD/dist/static-replay-viewer\"\npython3 tools/replay_summary.py path/to/episode.replay | jq .\n```\n\n## Art\n\nThe board art is the starter's shipped two-team shooter art, plus one\nnano-banana render (`scripts/art/source/marines_sheet.png`,\n`gemini-2.5-flash-image`, anchored on this repo's own cog reference) split by\n`scripts/art/split_cog_sheet.py` into `data/helm_red.png`,\n`data/helm_blue.png` and `data/glyph_frag.png` — the visored marine helmets and\nthe frag skull the kill feed and the `#eyes` captions draw.\n"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "# Rules — cogame-vizdoom-deathmatch\n\nEight cogs, four RED and four BLUE, in one walled arena with cover, glass\nwindows, med kits and nothing to capture. Kill an enemy, take a frag. Die,\nlose one. After 108 seconds the two teams' net frags are compared and the\nmargin is the score. Nobody is capturing anything; the only thing that happens\nin this game is that somebody shoots first.\n\nThis is **not** a ViZDoom port — see [Divergences](#divergences). What it\nreproduces is the ViZDoom multiplayer benchmark's *shape*: eight agents, one\nmap, an egocentric observation, frags − deaths.\n\n## Seats, cogs, teams, aliases\n\n- **`num_agents` = 8, always** — in both shipped variants, in the certification\n  fixture and as `SMOKE_SEATS` in `tools/ci/docker_smoke.sh`. **One cog per\n  seat** (`cogsPerTeam: 1`), so eight seats drive eight bodies.\n- **Teams are assigned by the server, never chosen.** Every variant's `slots[]`\n  is `red, blue, red, blue, …`, so slot parity *is* the team: seats **0, 2, 4,\n  6 are RED** and **1, 3, 5, 7 are BLUE**. `closedRoster` is true, so a joining\n  player takes the slot its token names or is refused.\n- **Two name spaces.** In game a cog is `RED-alpha`…`RED-delta` /\n  `BLUE-alpha`…`BLUE-delta`, and those aliases are the only names in an\n  observation, a prompt, an order, a shout, a radio line or a sprite label. A\n  seat's real policy name exists spectator-side only: the replay config's\n  `players[].name`, `results.names`, and the viewer's scorebug plates and\n  endcard. `showPlayerLabels` is false in every variant.\n\n## The arena\n\nThe board is **1235 × 659 px in every shipped variant**. Two variants, two ways\nof choosing the geometry, the same dimensions either way:\n\n| Variant | `mapPath` | Geometry |\n|---|---|---|\n| `arena` | `\"arena\"` | the hand-tuned symmetric arena, identical every episode |\n| `pool` | `\"pool\"`, `mapSize: \"standard\"` | the curated 20-seed pool; the entry index is derived from the episode seed **before any seat connects**, and the resolved geometry is pinned into the replay as `mapSpec` |\n\n**Zones.** The board is divided once into a **5 × 3 lettered grid**: columns\n`A`…`E` left to right (247 px each), rows `1`…`3` top to bottom. `A1` is the\ntop-left corner, `E3` the bottom-right. Zone centres are published to every\nseat in its first observation and are the only place names in the game. **RED\nspawns in column A, BLUE in column E.** Each zone carries a one-word terrain\nlabel derived at load from its wall fraction: `open` (< 8 % wall), `cover`, or\n`corridor` (> 22 %).\n\n## Weapons, health, respawns\n\n| Thing | Value |\n|---|---|\n| Gun | instant line-of-sight hitscan along the aim, `A` button |\n| `fireWindupTicks` | 5 (≈0.2 s from trigger pull to shot; **the aim locks at the pull**) |\n| `fireCooldownTicks` | 12 (≈0.5 s between shots) |\n| `gunRange` | 1050 px on every map |\n| Aim fuzz | a fully visible target at max range is hit ~80 % of the time, near-certainly closer |\n| `hitPoints` | 3 |\n| Friendly fire | **on** — a team kill costs the killer a frag |\n| `respawnTicks` | 48 (2.0 s), at the team's own spawn pocket, hp reset to 3 |\n| `lives` | 60 — high enough that a wipe is provably unreachable |\n| Med kits | placed by the map, respawn 30 s after being taken |\n| `aimTurnRate` | 5 brads/tick (≈7°/tick; a full turn in 51 ticks) |\n| `visionConeDeg` | **45** — a 90° beam, ViZDoom's default horizontal FOV |\n| `visionBubble` | 90 px, still line-of-sight blocked |\n| Vision range | `gunRange * 3 div 2` = 1575 px — you see further than you shoot |\n| Glass windows | block movement and bullets, transparent to vision |\n| Shout | `say` is an in-world shout audible to **both** teams within 247 px, alive 72 ticks, at most one per 24 ticks |\n\n**A wipe is unreachable, which is why `wipe` is not a legal end rule.** A cog\ncannot die more often than once per `respawnTicks + 1` ticks, so its ceiling in\na 2592-tick game is 52 deaths, and `lives` is 60.\n\n## The clock\n\n- **Tick** = 1/24 s. **Turn** = one order round every 108 ticks (4.5 s).\n- **One game** = 2592 ticks = **24 turns = 108 s of sim**, `maxGames: 1`.\n- Between turns the loop runs uncapped (`fastMode`), so the episode's wall\n  clock is the 24 LLM turns.\n- **Playback** is 1 tick per frame at 24 fps, so a full episode plays for 108 s.\n\n## Scoring\n\nPer cog `c`, from counters the sim already maintains:\n\n```\nfrags[c]      = kills of ENEMY cogs by c\nteamFrags[c]  = kills of OWN-TEAM cogs by c\ndeaths[c]     = every death of c, whatever the cause\nnet[c]        = frags[c] - teamFrags[c] - deaths[c]\n```\n\n`net[c]` is literally frags − deaths, with a team kill charged to the killer as\na lost frag — the Quake/ViZDoom convention, and the only thing that stops\nfriendly fire from being a free way to deny an enemy a frag.\n\n```\nteamNet[T]       = sum of net[c] over the four cogs of team T\nmargin(T)        = teamNet[T] - teamNet[other(T)]        (exactly antisymmetric)\nDecisiveMargin   = 12\nscorePermille[s] = 500 + clamp(margin * 500 div 12, -500, +500)\nscores[s]        = scorePermille[s] / 1000.0             in [0.0, 1.0]\nwin[s]           = scorePermille[s] > 500\n```\n\n**Higher is better.** `1.000` is a 12-frag rout, `0.500` a dead-even game,\n`0.000` the reverse. A red seat's score and a blue seat's score sum to\n**exactly 1.000** for every legal margin.\n\n**There is no tiebreak, deliberately.** A margin of exactly 0 is a draw: all\neight seats score `0.500` and every `win` is false. A manufactured tiebreak\nwould be a second scoring rule, it would break the exact zero sum, and Elo\nhandles draws natively.\n\nEverything else is measured and shown, never scored: per-seat `frags`,\n`teamFrags`, `deaths`, `net`, `damageDealt`, `damageTaken`, `shotsFired`,\n`shotsHit`, `medkits`, `longestStreak`. `damageDealt` / `damageTaken` are\nrecorded so an episode's damage graph is reconstructable from `results` alone.\n\n## End conditions\n\nThe episode ends at the first of full time, the wall-clock stop, or a fault.\n`results.reason` is exactly one of:\n\n- **`complete`** — 2592 ticks elapsed. `results.endRule = \"full_time\"`. The\n  healthy value.\n- **`deadline`** — the engine's own wall-clock stop at\n  `wallClockBudgetSeconds` (660 s). The engine settles from the **real frag\n  counters so far**, so a deadline episode is still rankable and still exactly\n  zero-sum. `results.endRule = \"wall_clock\"`.\n- **`fault`** — an unexpected exception, caught. Both sides score 0.500,\n  artifacts are still written, and `tools/ci/docker_smoke.sh` fails the build\n  if the smoke episode reports it.\n\n`results.endRule` is therefore also closed: `full_time | wall_clock |\nsim_fault | host_error`. **`mercy` and `wipe` are gone** with the mechanics\nthat produced them.\n\n**Budget guard.** At the start of each turn, if two more full turns would not\nfit inside the wall-clock stop, the LLM is switched off for every remaining\nturn (all seats fall to `rusher`, microseconds per turn), the remaining ticks\nrun at full speed, and the episode still ends `complete` / `full_time`. The\ncomparison uses the LARGER of `turnBudgetMs` and the derived rate floor.\n\n## Orders\n\nEach seat gives its cog ONE order per turn and a deterministic driver carries\nit out until the seat changes it.\n\n| Field | Cap / domain |\n|---|---|\n| `intent` | ≤ 12 runes; `hunt` \\| `hold` \\| `move_to` \\| `flank` \\| `retreat` \\| `regroup`. Anything unknown is repaired to `hunt` |\n| `at` | ≤ 12 runes; a published zone id (`A1`…`E3`) or a contact alias (`BLUE-delta`). **`at` wins over `to`.** Unresolvable → falls back to `to`, counts in `ordersRejected`, reports `unknown_target` |\n| `to` | `[x, y]`, clamped into `[0, 1234] × [0, 658]` |\n| `face` | optional `[x, y]`; the bearing a `hold` keeps once it arrives |\n| `say` | ≤ 10 runes — an **in-world shout**, heard by *both* teams within 247 px |\n| `radio` | ≤ 96 runes — the **team** channel, delivered to your three teammates' next observation, never audible in-world |\n| `notes` | ≤ 160 runes — private, echoed back to this seat only |\n\n| Intent | What the driver does |\n|---|---|\n| `hunt` | flow-field nav to the target; on arrival it sweeps around the approach bearing |\n| `hold` | nav to the point, then stop dead and hold `face` if given, else the bearing to the map centre |\n| `move_to` | flow-field nav to the point; aim along velocity unless `face` is given |\n| `flank` | nav to the point **via a waypoint** in row 1 or row 3 — whichever has had no enemy contact in the last 72 ticks — in the column midway between the cog and the target |\n| `retreat` | nav to the team's own spawn anchor, then hold facing the map centre; fire is held only while more than 300 px from the anchor |\n| `regroup` | nav to the centroid of the living teammates, snapped to a walkable cell, then hold |\n\n**The trigger rule.** `A` is pressed iff **all** of: the cog is alive; the gun\nis off cooldown with no windup in flight; a **live enemy** is known with\n`ticks_ago == 0` (seen *this* tick, never a memory); it is inside `gunRange`;\nthe aim error is inside 24 brads; the line of sight is clear; **and no\nteammate's body box intersects the bullet corridor**. There is no suppressive\nfire and no firing at memories. Friendly fire is on in the *sim*; the driver\nsimply refuses to cause it, so a team kill in a replay is always an accident of\nmovement, never a bot bug.\n\n## The two scripted baselines\n\nBoth emit the same order object an LLM does, through the same validator.\nNeither ever emits `radio` or `notes`.\n\n**`rusher`** (`PLAYER_SCRIPTED=rusher`) — also the per-turn fallback and the\ndefault for a seat that registers with neither field. First matching rule wins:\ndead → `hold` at the spawn anchor; a live enemy known within 520 px → `hunt`\nit; hp ≤ 1 with a live med kit within 360 px → `move_to` it; otherwise\n`move_to` the **contested zone** (the zone with the most distinct enemy\ncontacts in the last 72 ticks, ties toward the centre, `C2` with no contacts).\n\n**`sentry`** (`PLAYER_SCRIPTED=sentry`) — deliberately weaker and different in\n*shape*: it never crosses the centre line unless it is already hunting, and its\nhunt radius is 260 px. Otherwise it holds an assigned post on its own half,\nfacing the map centre.\n\n`rusher` — not `sentry` — is the fallback **because a degraded episode must\nstill be a legible deathmatch**: eight sentries hold eight posts and produce a\n0-0 draw with an empty kill feed.\n\n## Divergences\n\n1. **This is not a ViZDoom port.** No ZDoom, no `vizdoom` bindings, no WAD, no\n   raw pixel buffer, no depth/labels *image*.\n2. **The observation is text, not pixels.** The 16-ray depth strip and the\n   labelled contact list are ViZDoom's depth and labels buffers written as\n   JSON. See [OBSERVATION.md](OBSERVATION.md).\n3. **Teammates are not fogged** (the starter fogs everyone). Four independent\n   policies on one team, each driving one body at a 4.5 s cadence, cannot play\n   team deathmatch blind. Enemies are fogged exactly as the starter fogs them.\n4. **`visionConeDeg` 60 → 45.** A 90° total cone is ViZDoom's default FOV, and\n   a 120° cone at 1575 px on a 1235 px board is very close to no fog at all.\n5. **One cog per seat.** `num_agents` is the cog count.\n6. **The driver refuses to cause friendly fire**, though the sim allows it.\n7. **`mercy` and `wipe` are gone.** Full time, wall clock or fault — nothing\n   else can end an episode.\n"
+          }
+        },
+        {
+          "id": "observation.md",
+          "title": "What a seat sees",
+          "content": {
+            "type": "text",
+            "value": "# What a seat sees\n\nThe guiding line: **a seat sees what its cog's eyes see, plus what its team\nsays.** There is no free-cam and no map-wide enemy list — the fog is the game.\n\nStructurally this is ViZDoom's *depth buffer plus labels buffer*, written as\ntext: sixteen ray distances across the cone, and one labelled row per thing the\ncone or the bubble actually contains. Both come out of `marchRays` in\n`src/vzd/egoview.nim` — **the same proc the viewer's first-person inset uses** —\nso the wall the model reads about and the wall the spectator sees can never\ndisagree.\n\nThe observation is a JSON object appended to the user message, and it is\nmirrored (minus `your_notes`) into the replay's `directive` record, so the\nreplay explains every decision.\n\n```json\n{\n  \"you\": \"RED-beta\",\n  \"team\": \"RED\",\n  \"turn\": 7, \"turns\": 24,\n  \"clock\": {\"played_s\": 31, \"left_s\": 77},\n  \"map\": {\"w\": 1235, \"h\": 659,\n          \"zones\": [{\"id\":\"A1\",\"c\":[123,110],\"t\":\"cover\"},\n                    {\"id\":\"C2\",\"c\":[617,330],\"t\":\"corridor\"}],\n          \"your_spawn\": \"A2\", \"their_spawn\": \"E2\",\n          \"medkits\": [{\"at\":[617,120],\"zone\":\"C1\"}]},\n  \"you_at\": {\"pos\": [402,318], \"aim\": 8, \"facing\": \"E\", \"zone\": \"B2\",\n             \"hp\": 2, \"alive\": true, \"respawn_in_ticks\": 0, \"fire_ready\": true,\n             \"frags\": 2, \"deaths\": 1, \"streak\": 1},\n  \"rays\": [[-45,318,-1],[-39,341,-1],[-33,377,-1],[-27,441,-1],[-21,612,-1],\n           [-15,905,-1],[-9,1204,-1],[-3,-1,742],[3,-1,742],[9,1188,-1],\n           [15,884,-1],[21,598,-1],[27,430,-1],[33,369,-1],[39,334,-1],\n           [45,312,-1]],\n  \"contacts\": [\n    {\"label\":\"enemy\",\"id\":\"BLUE-alpha\",\"bearing\":-4,\"dist\":688,\"zone\":\"C2\",\"hp\":3,\"ticks_ago\":0},\n    {\"label\":\"enemy\",\"id\":\"BLUE-delta\",\"bearing\":22,\"dist\":915,\"zone\":\"D3\",\"hp\":null,\"ticks_ago\":41},\n    {\"label\":\"medkit\",\"id\":null,\"bearing\":-31,\"dist\":214,\"zone\":\"B1\",\"hp\":null,\"ticks_ago\":0}\n  ],\n  \"team_net\": [\n    {\"id\":\"RED-alpha\",\"pos\":[268,140],\"hp\":3,\"alive\":true,\"zone\":\"A1\",\"radio\":\"holding the north lane\"}\n  ],\n  \"heard\": [{\"team\":\"BLUE\",\"text\":\"push mid\",\"at\":[640,330],\"ticks_ago\":18}],\n  \"score\": {\"you\": 6, \"them\": 4, \"margin\": 2,\n            \"your_team\": [{\"id\":\"RED-alpha\",\"f\":3,\"d\":1}]},\n  \"your_last_order\": {\"intent\":\"hunt\",\"at\":\"C2\",\"result\":\"chasing\"},\n  \"your_notes\": \"hold the B2 doorway, they funnel through C2\"\n}\n```\n\n## Field rules\n\n- **`map`** is sent ONCE, at this seat's first turn: fifteen zones is a lot of\n  tokens to resend twenty-four times for a board that cannot move. The terrain\n  is public knowledge — only *bodies* are fogged — because a seat that cannot\n  navigate cannot play.\n- **`rays`** is the depth strip: 16 entries spanning the cone from −45° to +45°\n  in 6° steps, each `[bearing_deg, wall_dist_px, glass_dist_px]`, with `-1`\n  meaning \"nothing within `visionRange`\". Glass is transparent to vision and\n  solid to bullets, so a column can report a glass pane in front of a wall.\n- **`contacts`** is one row per entity the cog can legitimately see right now\n  (inside the cone with a clear line, or inside the 90 px bubble), plus every\n  enemy this cog saw within the last 72 ticks tagged `ticks_ago` and positioned\n  where it **was when seen**. `label` is exactly ViZDoom's labels-buffer object\n  class: `enemy`, `ally` or `medkit`. **An enemy with `ticks_ago` above 0 is a\n  MEMORY, not a sighting — it has moved.**\n- **`aim`** is brads (256 per turn, 0 = east, counter-clockwise); `facing` is\n  the nearest of the eight compass points, because a model reasons better about\n  \"NE\" than about \"32\".\n- **`bearing`** is **degrees relative to your own aim**, negative left — an\n  egocentric quantity, never a world angle.\n- **`margin`** is `teamNet[you] − teamNet[them]`, so \"higher is better for me\"\n  always holds.\n- **`your_last_order.result`** is the driver's honest report of how the previous\n  order ended: `moving | arrived | chasing | holding | firing | no_route |\n  dead | respawned | unknown_target`. It is what lets a seat recover from a\n  race it could not see.\n\n## Hidden\n\nEvery other seat's order, notes, radio and prompt; every seat's real player\nname, policy name and kind; the enemy team's per-cog frag/death breakdown (only\nits team total is public); enemy positions outside your cone, bubble and\n72-tick memory; enemy aim and intent; the seed; the unselected pool entries;\nand the map's own `mapSpec` document — a seat gets zones, not wall rectangles.\n\n## Reply\n\nOne JSON object, beginning with `{`:\n\n```json\n{\"intent\": \"hunt\", \"at\": \"C2\", \"to\": [617, 330], \"face\": [700, 330],\n \"say\": \"mid\", \"radio\": \"BLUE-alpha is in C2 at 3hp, I take the north door\",\n \"notes\": \"hold B2 next turn if this fails\"}\n```\n\nEvery field is **repaired, never rejected**: an unknown `intent` becomes\n`hunt`, an unresolvable `at` falls back to `to`, an out-of-board `to` is\nclamped, and a reply that names no order at all keeps last turn's order (else\n`rusher`'s). A reply with a valid `say`/`radio` but no `intent` is **usable**:\nthe cog carries on and the line is delivered. The starter's `cogs: [...]` array\nform is still accepted, with its single entry read as the flat order.\n\nEvery string that lands in the replay — `say`, `radio`, `notes`, the policy\nlabel, `stopDetail`, recorded error text — is **truncated on RUNE boundaries**,\nnever by byte index. Byte truncation is what makes a replay that renders in a\nbrowser fail a strict UTF-8 parser.\n"
+          }
+        },
+        {
+          "id": "protocol.md",
+          "title": "Wire protocol",
+          "content": {
+            "type": "text",
+            "value": "# Wire protocol — Sprite v1 plus this game's extensions\n\nBoth the player endpoints (`/player`, per-seat observation streams) and the\nglobal/spectator endpoint speak\n[Sprite v1](https://github.com/Metta-AI/bitworld/blob/master/docs/sprite_v1.md).\nThis document lists everything `vizdoom-deathmatch` adds or changes relative to\nthat base document; anything not mentioned here matches Sprite v1 exactly. Game\nsemantics — mechanics, tuning defaults, scoring — live in\n[`RULES.md`](RULES.md), and what a seat is *told* lives in\n[`OBSERVATION.md`](OBSERVATION.md).\n\n## A seat sends NO inputs\n\n**This is the important one.** A player container in this game never sends a\n`0x84` Player Input packet. Every actuator mask comes from the server-side\ncontrol layer, which compiles the seat's ORDER into per-tick d-pad / `A` / `B`\n/ `Select` bytes and records those bytes — not the orders — into the replay.\nBit 7 (`C`) is never used: there is no grenade and no barrier here.\n\nWhat a seat does send is exactly one thing, its **registration**, as a Sprite\nv1 chat message (`0x81`):\n\n```json\n{\"type\":\"register\",\"policy\":\"<label>\",\"prompt\":\"<PLAYER_PROMPT or empty>\",\n \"scripted\":\"rusher\"|\"sentry\"|null}\n```\n\n- `prompt` is rune-truncated at 4000 runes and `policy` at 48 runes.\n- A seat with a non-empty `prompt` is an **LLM seat**; a seat with `scripted`\n  is a scripted seat; a seat with neither is `rusher`.\n- The registration is **consumed as registration** — never applied as a shout\n  and never written to the replay chat stream, because the prompt is a secret.\n  The replay gets a redacted `register` record: the policy label and kind only.\n- Any other chat text from a seat is dropped. Cogs speak through the order's\n  `say` field; seats do not.\n- A seat **re-sends** its registration for the first ~10 s of received frames,\n  because joins are slot-sequential and a registration that arrives before the\n  slot lands must not be lost.\n\n`0x85` Player Ready is sent and is legitimate here for exactly that reason:\nthis seat contributes no inputs, so readiness pacing costs the episode nothing.\n\n## The LLM call is made by the GAME, not the player\n\n`ANTHROPIC_API_KEY_URI` is declared on `game.runnable.env`\n(`secret://coworld/vizdoom-deathmatch/anthropic_api_key`) and the game pod is\nthe only process that talks to a provider. Policies carry no `USE_BEDROCK`\nflag and need no credentials of their own.\n\nCredentials are resolved in order: Bedrock sidecar\n(`AWS_ENDPOINT_URL_BEDROCK_RUNTIME` + `AWS_BEARER_TOKEN_BEDROCK`) →\n`ANTHROPIC_API_KEY` → `ANTHROPIC_API_KEY_URI` → **none**, in which case the\nclient is disabled and every turn falls back instantly with no network wait, so\noffline certification finishes in seconds.\n\n## Cadence, batching and the deadlines\n\nOne turn every 108 ticks; 24 turns per episode. At each turn the server builds\n**every** LLM seat's request body and issues them as **ONE PARALLEL BATCH**\n(`curly.makeRequests`) — this is a simultaneous-decision game and eight serial\ncalls would multiply the wall clock by eight for nothing.\n\n```\nattempt1Ms                          8.0 s\nretryMs                             3.0 s\nturnBudgetMs                       12.0 s   (monotonic deadline around the turn)\nturnSpacingMs (configured floor)    5.0 s\neffectiveSpacingMs(n) = max(turnSpacingMs, ceil(60000 * n / 28))\n                                 -> 5.0 s at 2 LLM seats, 17.143 s at 8\nwallClockBudgetSeconds            660   s   (engine hard stop -> \"deadline\")\n```\n\nA rolling 60-second request counter backs the floor up: if issuing the next\nbatch would push the trailing minute above 28 requests, the seats that would\nexceed it skip the call for that turn and take the `rusher` order with\n`cause = \"rate_guard\"`. Bounded, logged, never a sleep on the critical path.\n\n## Endpoints\n\n| Route | Purpose |\n|---|---|\n| `GET /healthz` | liveness; keeps answering for the `gameOverTicks` grace after artifacts are written |\n| `WS /player?slot=<i>&token=<t>` | the seat socket; a token that does not match its seat is **closed** |\n| `GET /client/player?slot=&token=` | the certifier's browser probe; token-checked, and it does **not** open the player socket |\n| `GET /client/global`, `WS /global` | the spectator stream; fire-and-forget, so a slow viewer can never stall the episode |\n| `GET /client/replay`, `GET /replay-data` | local developer replay mode; **never declared to the platform** — the hosted viewer is the static wasm bundle |\n\n`COGAME_CONFIG_URI` in; `COGAME_RESULTS_URI`, `COGAME_SAVE_REPLAY_URI`,\n`COGAME_PLAYER_FAILURE_URI`, `COGAME_EVENTS_URI` out; `HOST` / `PORT`.\n`COGAME_PLAYER_FAILURE_URI` receives the platform's **closed** payload —\nexactly `{\"message\", \"failed_policy_index\"}`, nothing else.\n\n## Your own aim, and dead reckoning between frames\n\nAim is decoupled from movement and **carries your vision**: the cone is 45°\neither side of `aimBrads`, so you see where you point, not where you walk.\n`B` rotates counter-clockwise and `Select` clockwise at `aimTurnRate` brads per\ntick. A seat never presses these itself — the driver does — but a spectator\nclient reads `aim`, `cone`, `rng` and `bub` off every roster row on the global\nstream, unconditionally, on every frame: the eight cones are the spectator's\nwhole understanding of who can see whom.\n\n## The replay\n\nThe replay is the starter's binary **`COWLDVZD`** format, and it is\nself-sufficient: header (magic, format version, `gameName`\n`vizdoom-deathmatch`, `gameVersion`), the resolved config JSON **including the\nfull `mapSpec`**, joins/leaves, one input mask per cog per tick, the chat\nrecords, and **one `gameHash` per tick**. The wasm viewer re-simulates from the\nrecorded masks with the *same* sim module and compares the hash every tick.\n\nChat records (written by the server, re-applied at playback into non-hashed\nfields only, so they can never affect the sim):\n\n| `k` | Fields |\n|---|---|\n| `register` | `seat`, `team`, `policy` (≤ 48 runes), `kind`, `baseline` |\n| `directive` | `game`, `turn`, `seat`, `team`, `alias`, `source` (`llm`\\|`scripted`\\|`fallback`), `latency_ms`, `intent`, `at`, `target`, `face`, `say` (≤ 10), `radio` (≤ 96), `note` (≤ 160), `view`; whole record ≤ 900 runes |\n| `fallback` | `game`, `turn`, `seat`, `attempt`, `cause`, `detail` (≤ 200 runes) |\n| `budget_guard` | `turn`, `remaining_s` |\n| `stop` | `tick`, `endRule` — the load-bearing wall-clock/fault stop |\n| `result` | the full results document, written once at episode end |\n\n`tools/replay_summary.py` (python3 stdlib only) prints one strict-UTF-8 JSON\nobject for a `.replay` path, which is what phase 60's definition-of-done check\nreads instead of `jq .` on the raw bytes.\n\n## Frame pacing: drain the backlog, act on the latest frame\n\nThe server may send several frames while a client is thinking. Read every\npending frame and act on the newest; never queue one reply per frame. In this\ngame a seat's only outbound traffic after registration is the Player Ready\nacknowledgement, so a backlog costs nothing but staleness.\n\n## Observation render scale\n\nPlayer observation coordinates are 1× map scale (the board is 1235 × 659 world\npixels). The global stream states the board's supersample factor per frame as\n`bs` so a viewer can convert board pixels to world pixels.\n"
+          }
+        }
+      ]
+    }
+  },
+  "player": [
+    {
+      "type": "player",
+      "image": "{{VIZDOOM_DEATHMATCH_IMAGE}}",
+      "run": [
+        "/bin/vizdoom-deathmatch-player"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-vizdoom-deathmatch/tree/main",
+      "resources": {
+        "requests": {
+          "cpu": "200m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      },
+      "id": "rusher",
+      "name": "rusher",
+      "description": "Pressure. Hunts any live enemy known within 520px, heals at 360px when down to one hit point, and otherwise walks at the contested zone - the zone with the most enemy contacts in the last 72 ticks. Also the server-side fallback whenever an LLM seat misses its call, because a degraded episode must still be a legible deathmatch.",
+      "env": {
+        "PLAYER_SCRIPTED": "rusher",
+        "PLAYER_POLICY_LABEL": "rusher"
+      }
+    },
+    {
+      "type": "player",
+      "image": "{{VIZDOOM_DEATHMATCH_IMAGE}}",
+      "run": [
+        "/bin/vizdoom-deathmatch-player"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-vizdoom-deathmatch/tree/main",
+      "resources": {
+        "requests": {
+          "cpu": "200m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      },
+      "id": "sentry",
+      "name": "sentry",
+      "description": "Posting. Never crosses the map's centre line unless it is already hunting, commits only inside 260px, and otherwise holds an assigned post on its own half facing the middle. Deliberately weaker than rusher and different in SHAPE, so the ladder gets a spread rather than two versions of one bot.",
+      "env": {
+        "PLAYER_SCRIPTED": "sentry",
+        "PLAYER_POLICY_LABEL": "sentry"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "arena",
+      "name": "Arena deathmatch (4v4, hand-tuned map)",
+      "description": "Eight cogs, four red against four blue, on the hand-tuned symmetric arena. Each cog sees only its own 90-degree cone: a sixteen-ray depth strip and a labelled list of whatever is inside it. Hitscan gun, three hit points, two-second respawns, friendly fire on. Every 4.5 seconds each seat gives its cog one order and a deterministic driver walks it, turns it and pulls the trigger. After 108 seconds the two teams' frags minus deaths are compared and the margin is the score.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Cog1"
+          },
+          {
+            "name": "Cog2"
+          },
+          {
+            "name": "Cog3"
+          },
+          {
+            "name": "Cog4"
+          },
+          {
+            "name": "Cog5"
+          },
+          {
+            "name": "Cog6"
+          },
+          {
+            "name": "Cog7"
+          },
+          {
+            "name": "Cog8"
+          }
+        ],
+        "slots": [
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          }
+        ],
+        "num_agents": 8,
+        "minPlayers": 8,
+        "closedRoster": true,
+        "teams": 2,
+        "cogsPerTeam": 1,
+        "lives": 60,
+        "hitPoints": 3,
+        "respawnTicks": 48,
+        "gunRange": 1050,
+        "fireCooldownTicks": 12,
+        "fireWindupTicks": 5,
+        "aimTurnRate": 5,
+        "visionConeDeg": 45,
+        "visionBubble": 90,
+        "turnTicks": 108,
+        "maxTicks": 2592,
+        "maxGames": 1,
+        "attempt1Ms": 8000,
+        "retryMs": 3000,
+        "turnBudgetMs": 12000,
+        "turnSpacingMs": 5000,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2400,
+        "startWaitTicks": 120,
+        "gameOverTicks": 240,
+        "maxOutputTokens": 900,
+        "fastMode": true,
+        "showPlayerLabels": false,
+        "mapPath": "arena"
+      }
+    },
+    {
+      "id": "pool",
+      "name": "Pool deathmatch (4v4, seeded map)",
+      "description": "The same 4v4 deathmatch on a map drawn from the curated twenty-seed terrain pool by the episode seed, so no policy can learn one layout. The geometry is pinned into the replay, so a replay always renders the map it was played on. Same 108 seconds, same frags minus deaths, same 90-degree cone.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Cog1"
+          },
+          {
+            "name": "Cog2"
+          },
+          {
+            "name": "Cog3"
+          },
+          {
+            "name": "Cog4"
+          },
+          {
+            "name": "Cog5"
+          },
+          {
+            "name": "Cog6"
+          },
+          {
+            "name": "Cog7"
+          },
+          {
+            "name": "Cog8"
+          }
+        ],
+        "slots": [
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          },
+          {
+            "team": "red"
+          },
+          {
+            "team": "blue"
+          }
+        ],
+        "num_agents": 8,
+        "minPlayers": 8,
+        "closedRoster": true,
+        "teams": 2,
+        "cogsPerTeam": 1,
+        "lives": 60,
+        "hitPoints": 3,
+        "respawnTicks": 48,
+        "gunRange": 1050,
+        "fireCooldownTicks": 12,
+        "fireWindupTicks": 5,
+        "aimTurnRate": 5,
+        "visionConeDeg": 45,
+        "visionBubble": 90,
+        "turnTicks": 108,
+        "maxTicks": 2592,
+        "maxGames": 1,
+        "attempt1Ms": 8000,
+        "retryMs": 3000,
+        "turnBudgetMs": 12000,
+        "turnSpacingMs": 5000,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2400,
+        "startWaitTicks": 120,
+        "gameOverTicks": 240,
+        "maxOutputTokens": 900,
+        "fastMode": true,
+        "showPlayerLabels": false,
+        "mapPath": "pool",
+        "mapSize": "standard",
+        "mapPoolIndex": -1
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "rusher"
+      },
+      {
+        "player_id": "rusher"
+      },
+      {
+        "player_id": "sentry"
+      },
+      {
+        "player_id": "sentry"
+      },
+      {
+        "player_id": "rusher"
+      },
+      {
+        "player_id": "rusher"
+      },
+      {
+        "player_id": "sentry"
+      },
+      {
+        "player_id": "sentry"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "Cog1"
+        },
+        {
+          "name": "Cog2"
+        },
+        {
+          "name": "Cog3"
+        },
+        {
+          "name": "Cog4"
+        },
+        {
+          "name": "Cog5"
+        },
+        {
+          "name": "Cog6"
+        },
+        {
+          "name": "Cog7"
+        },
+        {
+          "name": "Cog8"
+        }
+      ],
+      "slots": [
+        {
+          "team": "red"
+        },
+        {
+          "team": "blue"
+        },
+        {
+          "team": "red"
+        },
+        {
+          "team": "blue"
+        },
+        {
+          "team": "red"
+        },
+        {
+          "team": "blue"
+        },
+        {
+          "team": "red"
+        },
+        {
+          "team": "blue"
+        }
+      ],
+      "num_agents": 8,
+      "minPlayers": 8,
+      "closedRoster": true,
+      "teams": 2,
+      "cogsPerTeam": 1,
+      "lives": 60,
+      "hitPoints": 3,
+      "respawnTicks": 48,
+      "gunRange": 1050,
+      "fireCooldownTicks": 12,
+      "fireWindupTicks": 5,
+      "aimTurnRate": 5,
+      "visionConeDeg": 45,
+      "visionBubble": 90,
+      "turnTicks": 108,
+      "maxTicks": 1080,
+      "maxGames": 1,
+      "attempt1Ms": 8000,
+      "retryMs": 3000,
+      "turnBudgetMs": 12000,
+      "turnSpacingMs": 0,
+      "wallClockBudgetSeconds": 240,
+      "lobbyJoinTimeoutTicks": 600,
+      "startWaitTicks": 0,
+      "gameOverTicks": 24,
+      "maxOutputTokens": 900,
+      "fastMode": true,
+      "showPlayerLabels": false,
+      "seed": 42,
+      "mapPath": "arena"
+    }
+  }
+}
