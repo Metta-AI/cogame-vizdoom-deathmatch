@@ -10,6 +10,7 @@
 
 import
   std/[json, os, strutils, unicode, unittest],
+  vzd/replays,
   vzd_helpers
 
 const RepoDir = currentSourcePath.parentDir.parentDir
