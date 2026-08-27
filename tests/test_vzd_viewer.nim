@@ -144,6 +144,15 @@ suite "legible at 360 px":
     check "min-width: 3.2em;" in page
     check "text-overflow: ellipsis;" in page
 
+  test "the eyes strip is stepped over the scorebug band, not laid on it":
+    check "top: calc(var(--topband, 0px) + 6 * var(--u));" in page
+
+  test "the plates carry net frags, frags, deaths and the fallback glyph":
+    check "function renderPlates(s)" in page
+    check "chip.title = 'Net frags" in page
+    check "' deaths · '" in page
+    check "class=\"dm-fb\"" in page
+
   test "labels are hidden under 640 px of board":
     check "#stage.tiny" in page
     check "#stage.tiny .plate .frag-label" in page
