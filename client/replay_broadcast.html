@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ctf — Broadcast Replay</title>
+<title>ViZDoom Deathmatch — Broadcast Replay</title>
 <style>
 /* ============================================================
    Ink & Print — warm CRT-phosphor arena broadcast.
@@ -1504,9 +1504,9 @@ body[data-embed] #board { top: 0; height: 100%; }
   // expression serves all three. Mirrors ART_BASE in league_replayer.html and
   // websocketPathForClientPage() in broadcast_core.js, which map the same
   // /client + /clients route pair the same way. The bundle is detected by its
-  // WASM adapter rather than a URL param: window.CtfStaticReplay only exists
+  // WASM adapter rather than a URL param: window.VzdStaticReplay only exists
   // when static_replay.js is on the page.
-  var COG_BASE = window.CtfStaticReplay
+  var COG_BASE = window.VzdStaticReplay
     ? '.'
     : location.pathname.replace(/\/clients?\/[^/]*$/, '') + '/client';
   var COG_ART = {}, COG_ART_GUN = {};
@@ -1793,7 +1793,7 @@ body[data-embed] #board { top: 0; height: 100%; }
   // frame yet. The fraction is remembered instead and resolved on the first
   // frame that carries the axis — the same one-shot shape as ?t=.
   var SEEK_FRAC = null;
-  var replayAdapter = window.CtfStaticReplay || null;
+  var replayAdapter = window.VzdStaticReplay || null;
   var coreConfig = {
     canvas: canvas,
     onText: function (txt) { onFrame(txt); },
