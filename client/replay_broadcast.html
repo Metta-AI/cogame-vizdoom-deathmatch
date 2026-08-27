@@ -4364,6 +4364,10 @@ button.beat-marker {
     el = document.createElement('div');
     el.id = 'fragbug';
     clock.appendChild(el);
+    // The band's height is MEASURED, and this row grew it: make relayout
+    // re-measure so --topband (which #eyes steps over) includes the fragbug
+    // instead of leaving the strip laid across it.
+    window.dispatchEvent(new Event('resize'));
     return el;
   }
 
@@ -4443,7 +4447,9 @@ button.beat-marker {
       var d = cols[i];
       if (!(d > 0)) continue;
       var lit = Math.max(0.15, Math.min(1, 260 / d));
-      var slice = Math.max(2, Math.min(h, h * 140 / d));
+      // 90px of wall fills the strip; anything further shrinks with distance,
+      // so a corridor reads as a corridor and open ground reads as open.
+      var slice = Math.max(2, Math.min(h, h * 90 / d));
       var base = team === 'red' ? [214, 96, 74] : [96, 148, 214];
       ctx.fillStyle = 'rgba(' +
         Math.round(base[0] * lit + 24) + ',' +
