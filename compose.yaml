@@ -1,0 +1,17 @@
+# ONE service, because the manifest's image placeholder is DERIVED from the
+# compose service name by uppercasing and mapping "-" to "_": this file is what
+# makes `{{VIZDOOM_DEATHMATCH_IMAGE}}` in coworld_manifest_template.json
+# resolve. (`{{GAME_IMAGE}}` is not a thing — the cogame-lantern 0.1.0 scar.)
+#
+# coworld-ctf ships two services and two images; this fork uses the one-image /
+# two-entrypoints shape, because the shared tools/ci/docker_smoke.sh and
+# tools/ci/policies.json both assume a single image and env-switch the seat
+# between /bin/vizdoom-deathmatch and /bin/vizdoom-deathmatch-player.
+services:
+  vizdoom-deathmatch:
+    image: coworld-vizdoom-deathmatch:latest
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
