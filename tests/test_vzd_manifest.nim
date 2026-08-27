@@ -140,15 +140,27 @@ suite "the wall clock fits inside 60% of the episode timeout":
     for config in allGameConfigs():
       check config["wallClockBudgetSeconds"].getInt() <= 660
 
-  test "24 turns at the worst-case rate floor still fits":
-    for config in allGameConfigs():
+  test "24 turns at the worst-case rate floor still fits every VARIANT":
+    ## The certification fixture is excluded on purpose: it runs offline, with
+    ## no API key and every seat scripted, which is why it sets
+    ## turnSpacingMs to 0 — there is no batch to space out and no rate floor
+    ## to pay. The league variants are the ones that must fit.
+    for variant in manifest["variants"]:
       let
+        config = variant["game_config"]
         turnTicks = config["turnTicks"].getInt()
         turns = max(1, config["maxTicks"].getInt() div turnTicks)
         floorMs = effectiveSpacingMs(
           config["turnSpacingMs"].getInt(), config["num_agents"].getInt())
+      checkpoint(variant["id"].getStr())
       check turns * floorMs div 1000 + 134 <=
         config["wallClockBudgetSeconds"].getInt()
+
+  test "the certification fixture finishes offline in seconds":
+    let cert = manifest["certification"]["game_config"]
+    check cert["turnSpacingMs"].getInt() == 0
+    check cert["maxTicks"].getInt() == 1080
+    check cert["wallClockBudgetSeconds"].getInt() <= 660
 
 suite "the shipped config actually constructs":
   test "every variant's game_config builds a valid GameConfig":
