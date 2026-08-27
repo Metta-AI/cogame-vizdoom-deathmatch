@@ -101,8 +101,11 @@ suite "the replay is self-sufficient":
     check echoed["cogsPerTeam"].getInt() == 1
     ## The map is pinned as a DOCUMENT, not as a name, so a later edit to the
     ## pool cannot change what an old replay renders.
+    ## The map is pinned as a JSON OBJECT, not as a string: `mapSpec` in the
+    ## echo is the resolved geometry document itself.
     check echoed.hasKey("mapSpec")
-    check echoed["mapSpec"].getStr().len > 0
+    check echoed["mapSpec"].kind == JObject
+    check echoed["mapSpec"].len > 0
     ## The token array in the replay echo is the SLOT tokens the sim was
     ## handed; it is never a manifest field (config_schema requires the runner
     ## to inject them, and no game_config carries a literal one).
