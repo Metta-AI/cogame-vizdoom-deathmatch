@@ -32,7 +32,7 @@ proc deathmatchConfigJson*(
     players.add(%*{"name": "Cog" & $(i + 1)})
     slots.add(%*{"team": (if i mod 2 == 0: "red" else: "blue")})
     tokens.add(%("t" & $i))
-  $(%*{
+  var node = %*{
     "seed": seed,
     "num_agents": Seats,
     "minPlayers": Seats,
@@ -62,7 +62,13 @@ proc deathmatchConfigJson*(
     "tokens": tokens,
     "players": players,
     "slots": slots
-  })
+  }
+  ## The pool variant pins the size the way the shipped manifest does; the
+  ## hand-tuned arena takes no size at all.
+  if mapPath == "pool":
+    node["mapSize"] = %"standard"
+    node["mapPoolIndex"] = %(-1)
+  $node
 
 proc cogAliasFor*(sim: SimServer, order: int): string =
   toUpperAscii(teamText(sim.teamForSlot(order))) & "-" &
