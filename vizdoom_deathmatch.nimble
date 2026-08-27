@@ -1,6 +1,6 @@
 version     = "0.1.0"
-author      = "treeform"
-description = "Retro 128x128 two-team capture-the-flag shooter AI environment."
+author      = "Softmax"
+description  = "Eight-cog 4v4 team deathmatch with fog-of-war vision cones: frags minus deaths."
 license     = "MIT"
 
 srcDir = "src"
