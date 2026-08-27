@@ -1,0 +1,4 @@
+dist/
+nimcache/
+*.out
+nim.cfg
