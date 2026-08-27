@@ -37,6 +37,10 @@ proc key*(kind: SimEventKind): string =
   of HillFlip: "hill_flip"
   of HillHold: "hill_hold"
   of Directive: "directive"
+  of TurnStart: "turn_start"
+  of Fallback: "fallback"
+  of Streak: "streak"
+  of Lead: "lead"
 
 proc jsonRow*(event: SimEvent): JsonNode =
   ## Returns one JSON-lines row for a tier-2 sim event.
