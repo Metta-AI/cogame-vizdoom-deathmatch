@@ -149,6 +149,17 @@ jobs:
           done
           exit "${fail}"
 
+      # The scripted baselines' four tunables are a grid harness's PICK, not a
+      # guess: `tools/tune_baselines.nim` re-runs the whole 36-cell sweep (216
+      # real episodes, ~90 s in release) and exits non-zero unless its winner
+      # is still what `src/vzd/baselines.nim` ships and what
+      # `tools/ci/baseline_tuning.json` records. Last, because it is the
+      # slowest step and a red sweep should not delay the unit results.
+      - name: The baseline tunables are still the grid harness's pick
+        run: |
+          set -euo pipefail
+          nim r --hints:off -d:release --path:src tools/tune_baselines.nim --check
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
   # end to end in raw docker with the certification fixture's seat mix.

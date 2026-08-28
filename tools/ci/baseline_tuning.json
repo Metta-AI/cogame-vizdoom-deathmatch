@@ -1,0 +1,382 @@
+{
+  "harness": "tools/tune_baselines.nim",
+  "ticks": 1080,
+  "seeds": [
+    42,
+    7,
+    4711
+  ],
+  "episodesPerCell": 6,
+  "note": "each cell is one rusher-vs-sentry 4v4 episode per seed from both sides; the pick wins the most episodes, team frag margin breaks ties. rusher's hunt radius stays above sentry's in every cell.",
+  "chosen": {
+    "rusherHuntPx": 120,
+    "sentryHuntPx": 260,
+    "medPx": 360,
+    "postRotation": 1,
+    "wins": 4,
+    "episodes": 6,
+    "margin": 6
+  },
+  "grid": [
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 2,
+      "episodes": 6,
+      "margin": -6,
+      "kills": 61
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -16,
+      "kills": 57
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 2,
+      "episodes": 6,
+      "margin": -2,
+      "kills": 61
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -24,
+      "kills": 56
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 2,
+      "episodes": 6,
+      "margin": -2,
+      "kills": 85
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -40,
+      "kills": 51
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 2,
+      "episodes": 6,
+      "margin": -4,
+      "kills": 80
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -48,
+      "kills": 54
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 2,
+      "episodes": 6,
+      "margin": -8,
+      "kills": 88
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -48,
+      "kills": 60
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 4,
+      "episodes": 6,
+      "margin": 6,
+      "kills": 90
+    },
+    {
+      "rusherHuntPx": 120,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -48,
+      "kills": 62
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 3,
+      "episodes": 6,
+      "margin": 8,
+      "kills": 83
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -28,
+      "kills": 69
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 3,
+      "episodes": 6,
+      "margin": 10,
+      "kills": 79
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -18,
+      "kills": 71
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -14,
+      "kills": 81
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -22,
+      "kills": 65
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -14,
+      "kills": 83
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -24,
+      "kills": 62
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -12,
+      "kills": 80
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -38,
+      "kills": 77
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -14,
+      "kills": 79
+    },
+    {
+      "rusherHuntPx": 200,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -34,
+      "kills": 74
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -6,
+      "kills": 78
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 100,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -44,
+      "kills": 68
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -8,
+      "kills": 79
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 100,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -44,
+      "kills": 68
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -16,
+      "kills": 79
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 180,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -36,
+      "kills": 76
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 1,
+      "episodes": 6,
+      "margin": -20,
+      "kills": 78
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 180,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -28,
+      "kills": 73
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 1,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -18,
+      "kills": 84
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 260,
+      "medPx": 240,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -32,
+      "kills": 83
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 1,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -18,
+      "kills": 86
+    },
+    {
+      "rusherHuntPx": 360,
+      "sentryHuntPx": 260,
+      "medPx": 360,
+      "postRotation": 2,
+      "wins": 0,
+      "episodes": 6,
+      "margin": -28,
+      "kills": 80
+    }
+  ]
+}

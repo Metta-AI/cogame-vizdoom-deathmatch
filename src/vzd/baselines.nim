@@ -39,14 +39,28 @@ type
     postRotation*: int         ## how the four sentry posts are dealt to seats.
 
 const DefaultBaselineParams* = BaselineParams(
-  ## The grid harness's pick, not a guess. The sweep's target is a
-  ## `rusher`-vs-`sentry` TEAM MARGIN in [+2, +10] frags over 6 seeds:
-  ## `rusher` must clearly win — pressure beats posting — without making the
-  ## game a walkover. `tools/ci/baseline_tuning.json` records the whole grid.
-  rusherHuntPx: 520,
+  ## The grid harness's pick, not a guess: the winning cell of the 36-cell
+  ## sweep `tools/tune_baselines.nim` runs (three seeds per cell, each played
+  ## from both sides), recorded whole in `tools/ci/baseline_tuning.json` and
+  ## re-asserted by `tests/test_vzd_tuning.nim` and by `ci.yml`'s
+  ## `tune_baselines --check` step. The sweep's target is the note's:
+  ## a `rusher`-vs-`sentry` TEAM MARGIN in [+2, +10] frags over 6 episodes —
+  ## `rusher` must clearly win, without making the ladder a walkover. This
+  ## cell wins 4 of 6 at +6.
+  ##
+  ## What the sweep found, and why these are not the note's first guesses
+  ## (520 px hunt / postRotation 2): a long chase leash LOSES. Four rushers
+  ## with a 520 px leash chase single sentries into their own half, where a
+  ## posted gun is already aimed at the corridor mouth, and they converge on
+  ## the same contact often enough to shoot each other — and a team kill
+  ## costs the killer a frag. Pulling the leash in to 120 px keeps `rusher`
+  ## on the contested zone, which is where the frags are. `postRotation: 1`
+  ## deals the four posts one per seat instead of one per pair, so a sentry
+  ## squad covers four mouths instead of two.
+  rusherHuntPx: 120,
   sentryHuntPx: 260,
   medPx: 360,
-  postRotation: 2
+  postRotation: 1
 )
 
 proc parseBaseline*(text: string): Baseline =

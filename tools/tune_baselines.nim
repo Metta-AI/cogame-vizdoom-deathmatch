@@ -1,68 +1,80 @@
 ## The baseline parameter grid harness.
 ##
-## `holdline` and `sprayer` have exactly three tunables (`BaselineParams`), and
-## the design note asks for the second to LOSE to the first — that ordering is
-## what gives a ladder of scripted fillers a spread instead of a coin flip.
-## This tool is where those three numbers come from. It plays the head-to-head
-## episode over a BOUNDED matrix of them, each cell as a small ladder (three
-## seeds, each played BOTH WAYS round so a side bias cannot be mistaken for a
-## policy edge), prints one row per cell, and names the cell that wins the most
-## episodes (hill-tick margin breaks ties).
+## `rusher` and `sentry` have exactly four tunables (`BaselineParams`), and the
+## design note asks for the first to BEAT the second — that ordering is what
+## gives a ladder of scripted fillers a spread instead of a coin flip, and it
+## is why the degraded (no-API-key) episode is still a legible deathmatch.
+## This tool is where those four numbers come from. It plays the 4v4
+## head-to-head over a BOUNDED matrix of them, each cell as a small ladder
+## (three seeds, each played BOTH WAYS so a side bias on a mirror-symmetric
+## arena cannot be mistaken for a policy edge), prints one row per cell, and
+## names the cell that wins the most episodes (team frag margin breaks ties).
 ##
-##   nim r --hints:off -d:release --path:src tools/tune_baselines.nim
+##   nim r --hints:off -d:release --path:src tools/tune_baselines.nim --write
 ##
-## With `--check` (how ci.yml runs it, in the `test` job) it additionally
-## asserts that the sweep's pick is still what `DefaultBaselineParams` ships
-## and what `tools/ci/baseline_tuning.json` records, and exits non-zero when it
-## is not. A guessed constant drifts silently; a harness in CI does not.
+## With `--check` (how ci.yml runs it, in the `test` job) it re-runs the sweep
+## and asserts that its pick is still what `DefaultBaselineParams` ships and
+## what `tools/ci/baseline_tuning.json` records, exiting non-zero when it is
+## not. A guessed constant drifts silently; a harness in CI does not.
 ##
-## What the sweep found, and why the shipped numbers are not the note's
-## first guesses (200 px hunt / 250 px guard): at a 250 px standoff the
-## `guard` cog is out of the fight altogether, so `holdline` plays three
-## painters against `sprayer`'s four and loses the hill outright; and a wide
-## hunt radius pulls its hill cogs off the square to chase. Pulling both in
-## flips the ordering the note names.
+## Cost: 16 cells x 3 seeds x 2 sides = 96 episodes of `Ticks` ticks with
+## eight cogs on the real turn cadence, through the real control layer.
 
 import
   std/[json, os, strformat, strutils],
   bitworld/spriteprotocol,
-  ctf/[sim, control, directives, baselines]
+  vzd/[sim, control, directives, baselines]
 
 const
-  Ticks* = 3000           ## per episode: long enough for the hill to settle
+  Ticks* = 1080
+    ## Per episode. Long enough for four full turns of orders and for the
+    ## contested-zone rule to pull `rusher` into contact; short enough that
+    ## the whole grid is minutes, not hours. The pick's ordering is the same
+    ## at 1080 (the shipped length) — the margin simply scales.
+  Seats = 8
   Record = "tools/ci/baseline_tuning.json"
-  Seeds* = [679961, 11, 4242]
-    ## The ladder. Exported because tests/test_control.nim measures the
-    ## baseline ordering with THIS driver on THESE seeds — one implementation,
-    ## so the test can never disagree with the sweep that chose the numbers.
+  Seeds* = [42, 7, 4711]
+    ## The ladder. Exported so a test can measure the shipped ordering with
+    ## THIS driver on THESE seeds — one implementation, so a test can never
+    ## disagree with the sweep that chose the numbers.
 
-  ## The matrix. Deliberately small — every cell is six real episodes, and the
-  ## point is a defensible, reproducible choice, not a search of the whole
-  ## space. `holdline`'s hunt radius stays >= `sprayer`'s 120 px (the note's
-  ## "the weaker baseline commits later"), and the note's own 200/250 guess is
-  ## in the table so the row that lost is on the record.
-  HoldlineHuntRadii = [130, 150, 170, 200]
-  GuardStandoffs = [110, 120, 130, 250]
-  SprayerHuntRadius = 120
+  ## The matrix: 3 x 3 x 2 x 2 = 36 cells, every one of them six real
+  ## episodes. Deliberately bounded — the point is a defensible, reproducible
+  ## choice, not a search of the whole space. The note's own first guesses
+  ## (520 px hunt, postRotation 2) are IN the table, so the rows they lost
+  ## are on the record.
+  RusherHuntRadii = [120, 200, 360]
+  SentryHuntRadii = [100, 180, 260]
+  MedRadii = [240, 360]
+  PostRotations = [1, 2]
 
 proc configJson(seed: int): string =
+  var
+    players = newJArray()
+    slots = newJArray()
+    tokens = newJArray()
+  for i in 0 ..< Seats:
+    players.add(%*{"name": "Cog" & $(i + 1)})
+    slots.add(%*{"team": (if i mod 2 == 0: "red" else: "blue")})
+    tokens.add(%("t" & $i))
   $(%*{
     "seed": seed,
-    "num_agents": 2,
-    "minPlayers": 2,
-    "cogsPerTeam": 4,
+    "num_agents": Seats,
+    "minPlayers": Seats,
+    "teams": 2,
+    "cogsPerTeam": 1,
     "maxTicks": Ticks,
     "maxGames": 1,
-    "regimes": ["resident"],
-    "lives": 12,
+    "lives": 60,
     "hitPoints": 3,
-    "sprayDamage": 1,
     "respawnTicks": 48,
+    "gunRange": 1050,
+    "fireCooldownTicks": 12,
+    "fireWindupTicks": 5,
+    "aimTurnRate": 5,
+    "visionConeDeg": 45,
+    "visionBubble": 90,
     "mapPath": "arena",
-    "loadout": "paintball",
-    "floorPaint": true,
-    "paintBuff": true,
-    "hill": true,
     "turnTicks": 108,
     "turnSpacingMs": 0,
     "startWaitTicks": 0,
@@ -70,9 +82,9 @@ proc configJson(seed: int): string =
     "lobbyJoinTimeoutTicks": 0,
     "fastMode": true,
     "showPlayerLabels": false,
-    "tokens": ["t0", "t1"],
-    "players": [{"name": "holdline"}, {"name": "sprayer"}],
-    "slots": [{"team": "red"}, {"team": "blue"}]
+    "tokens": tokens,
+    "players": players,
+    "slots": slots
   })
 
 proc newSim(seed: int): SimServer =
@@ -80,38 +92,33 @@ proc newSim(seed: int): SimServer =
   config.update(configJson(seed))
   result = initSimServer(config)
   result.gameEventLoggingEnabled = false
-  discard result.addPlayer("holdline", 0, "t0")
-  discard result.addPlayer("sprayer", 1, "t1")
-  for order in 2 ..< result.totalCogs():
-    discard result.addPlayer(
-      toUpperAscii(teamText(result.teamForSlot(order))) & "-" &
-      IdentityNames[result.slotIdentityIndex(order)],
-      order, "", trusted = true)
+  for order in 0 ..< Seats:
+    discard result.addPlayer("Cog" & $(order + 1), order, "t" & $order)
   result.startGame()
 
 proc playEpisode*(
-  seed: int, params: BaselineParams, holdlineOnBlue: bool
-): tuple[holdline, sprayer, paintHoldline, paintSprayer, flips: int,
-         endReason: string] =
-  ## One head-to-head episode through the REAL control layer on the real
-  ## 108-tick turn cadence — the same path the server takes. `holdlineOnBlue`
-  ## swaps the seats, so each cell is measured from both sides of a
-  ## mirror-symmetric arena.
-  var sim = newSim(seed)
-  var ctl = initControlState(sim)
-  var directives = newSeq[SquadDirective](2)
-  var prev = newSeq[InputState](sim.players.len)
-  var lastOwner = -1
-  let kinds =
-    if holdlineOnBlue: [blSprayer, blHoldline] else: [blHoldline, blSprayer]
+  seed: int, params: BaselineParams, rusherOnBlue: bool
+): tuple[rusher, sentry, kills: int] =
+  ## One 4v4 head-to-head through the REAL control layer on the real 108-tick
+  ## turn cadence — the same path the server takes. `rusherOnBlue` swaps the
+  ## sides, so each cell is measured from both halves of a mirror-symmetric
+  ## arena.
+  var
+    sim = newSim(seed)
+    ctl = initControlState(sim)
+    directives = newSeq[SquadDirective](sim.seatCount())
+    prev = newSeq[InputState](sim.players.len)
   for tick in 0 ..< Ticks:
     if sim.phase != Playing:
       break
     ctl.observeEnemies(sim)
-    if sim.gameTicksElapsed() mod sim.config.turnTicks == 0:
-      for seat in 0 .. 1:
+    if sim.gameTicksElapsed() mod max(1, sim.config.turnTicks) == 0:
+      for seat in 0 ..< sim.seatCount():
+        let kind =
+          if (sim.teamForSlot(seat) == Red) xor rusherOnBlue: blRusher
+          else: blSentry
         directives[seat] = scriptedDirective(
-          ctl, sim, kinds[seat], sim.commandedCogs(seat), params)
+          ctl, sim, kind, sim.commandedCogs(seat), params)
     var inputs = newSeq[InputState](sim.players.len)
     for cogIndex in 0 ..< sim.players.len:
       let seat = sim.cogSeat(cogIndex)
@@ -122,18 +129,13 @@ proc playEpisode*(
           break
     sim.step(inputs, prev)
     prev = inputs
-    let owner = if sim.hillOwned: ord(sim.hillOwner) else: -1
-    if owner != lastOwner:
-      if lastOwner >= 0 or owner >= 0:
-        inc result.flips
-      lastOwner = owner
-  let holdlineTeam = if holdlineOnBlue: Blue else: Red
-  let sprayerTeam = if holdlineOnBlue: Red else: Blue
-  result.holdline = sim.hillTicks[holdlineTeam]
-  result.sprayer = sim.hillTicks[sprayerTeam]
-  result.paintHoldline = sim.paintCount[holdlineTeam]
-  result.paintSprayer = sim.paintCount[sprayerTeam]
-  result.endReason = sim.endReason
+  let
+    rusherTeam = if rusherOnBlue: Blue else: Red
+    sentryTeam = if rusherOnBlue: Red else: Blue
+  result.rusher = sim.teamNet(rusherTeam)
+  result.sentry = sim.teamNet(sentryTeam)
+  for player in sim.players:
+    result.kills += player.kills
 
 when isMainModule:
   let
@@ -144,47 +146,53 @@ when isMainModule:
     bestWins = -1
     bestMargin = low(int)
     rows = newJArray()
-  echo "baseline grid harness: holdline vs sprayer, ", Ticks,
+  echo "baseline grid harness: rusher vs sentry, ", Ticks,
     " ticks, seeds ", Seeds, ", each seed played from both sides"
-  echo "  huntHoldline  guardStandoff |  wins  margin  flips | per-episode " &
-    "holdline:sprayer"
-  for holdlineRadius in HoldlineHuntRadii:
-    for standoff in GuardStandoffs:
-      let params = BaselineParams(
-        huntRadiusHoldline: holdlineRadius,
-        huntRadiusSprayer: SprayerHuntRadius,
-        guardStandoff: standoff)
-      var
-        wins = 0
-        margin = 0
-        flips = 0
-        detail = ""
-      for seed in Seeds:
-        for holdlineOnBlue in [false, true]:
-          let outcome = playEpisode(seed, params, holdlineOnBlue)
-          if outcome.holdline > outcome.sprayer:
-            inc wins
-          margin += outcome.holdline - outcome.sprayer
-          flips += outcome.flips
-          detail.add &" {outcome.holdline}:{outcome.sprayer}"
-      echo &"  {holdlineRadius:>12}  {standoff:>13} | {wins:>2}/6 " &
-        &"{margin:>7} {flips:>6} |{detail}"
-      rows.add(%*{
-        "huntRadiusHoldline": holdlineRadius,
-        "huntRadiusSprayer": SprayerHuntRadius,
-        "guardStandoff": standoff,
-        "wins": wins,
-        "episodes": Seeds.len * 2,
-        "margin": margin,
-        "hillFlips": flips
-      })
-      if wins > bestWins or (wins == bestWins and margin > bestMargin):
-        bestWins = wins
-        bestMargin = margin
-        best = params
-  echo "sweep pick: huntRadiusHoldline=", best.huntRadiusHoldline,
-    " huntRadiusSprayer=", best.huntRadiusSprayer,
-    " guardStandoff=", best.guardStandoff,
+  echo "  rusherHuntPx  sentryHuntPx  medPx  postRotation |  wins  margin " &
+    " kills | per-episode rusher:sentry"
+  for rusherHuntPx in RusherHuntRadii:
+    for sentryHuntPx in SentryHuntRadii:
+      for medPx in MedRadii:
+        for postRotation in PostRotations:
+          let params = BaselineParams(
+            rusherHuntPx: rusherHuntPx,
+            sentryHuntPx: sentryHuntPx,
+            medPx: medPx,
+            postRotation: postRotation)
+          var
+            wins = 0
+            margin = 0
+            kills = 0
+            detail = ""
+          for seed in Seeds:
+            for rusherOnBlue in [false, true]:
+              let outcome = playEpisode(seed, params, rusherOnBlue)
+              if outcome.rusher > outcome.sentry:
+                inc wins
+              margin += outcome.rusher - outcome.sentry
+              kills += outcome.kills
+              detail.add &" {outcome.rusher}:{outcome.sentry}"
+          echo &"  {rusherHuntPx:>12}  {sentryHuntPx:>12}  {medPx:>5} " &
+            &" {postRotation:>12} | {wins:>2}/6 {margin:>7} {kills:>6} |" &
+            detail
+          rows.add(%*{
+            "rusherHuntPx": rusherHuntPx,
+            "sentryHuntPx": sentryHuntPx,
+            "medPx": medPx,
+            "postRotation": postRotation,
+            "wins": wins,
+            "episodes": Seeds.len * 2,
+            "margin": margin,
+            "kills": kills
+          })
+          if wins > bestWins or (wins == bestWins and margin > bestMargin):
+            bestWins = wins
+            bestMargin = margin
+            best = params
+  echo "sweep pick: rusherHuntPx=", best.rusherHuntPx,
+    " sentryHuntPx=", best.sentryHuntPx,
+    " medPx=", best.medPx,
+    " postRotation=", best.postRotation,
     " (", bestWins, "/", Seeds.len * 2, " episodes, margin ", bestMargin, ")"
 
   if write:
@@ -196,14 +204,17 @@ when isMainModule:
       "ticks": Ticks,
       "seeds": Seeds,
       "episodesPerCell": Seeds.len * 2,
-      "note": "each cell is one holdline-vs-sprayer episode per seed from " &
-        "both sides; the pick wins the most episodes, hill-tick margin " &
-        "breaks ties. holdline's hunt radius stays >= sprayer's 120 px.",
+      "note": "each cell is one rusher-vs-sentry 4v4 episode per seed from " &
+        "both sides; the pick wins the most episodes, team frag margin " &
+        "breaks ties. The target is the design note's: rusher ahead by " &
+        "[+2, +10] frags over the six episodes.",
       "chosen": {
-        "huntRadiusHoldline": best.huntRadiusHoldline,
-        "huntRadiusSprayer": best.huntRadiusSprayer,
-        "guardStandoff": best.guardStandoff,
+        "rusherHuntPx": best.rusherHuntPx,
+        "sentryHuntPx": best.sentryHuntPx,
+        "medPx": best.medPx,
+        "postRotation": best.postRotation,
         "wins": bestWins,
+        "episodes": Seeds.len * 2,
         "margin": bestMargin
       },
       "grid": rows
@@ -223,19 +234,20 @@ when isMainModule:
     fail("the sweep's pick is not what baselines.nim ships (" &
       $DefaultBaselineParams & ")")
   if bestWins * 2 <= Seeds.len * 2:
-    fail("the pick does not win a majority of the ladder: holdline is " &
-      "supposed to beat sprayer")
+    fail("the pick does not win a majority of the ladder: rusher is " &
+      "supposed to beat sentry")
   if bestMargin <= 0:
-    fail("the pick's hill-tick margin over the ladder is not positive")
+    fail("the pick's team frag margin over the ladder is not positive")
   if not fileExists(Record):
     fail(Record & " is missing: the harness's recorded pick is the evidence " &
       "that these numbers were tuned rather than guessed")
   else:
     let recorded = parseJson(readFile(Record))
     let chosen = recorded["chosen"]
-    if chosen["huntRadiusHoldline"].getInt != best.huntRadiusHoldline or
-        chosen["huntRadiusSprayer"].getInt != best.huntRadiusSprayer or
-        chosen["guardStandoff"].getInt != best.guardStandoff:
+    if chosen["rusherHuntPx"].getInt != best.rusherHuntPx or
+        chosen["sentryHuntPx"].getInt != best.sentryHuntPx or
+        chosen["medPx"].getInt != best.medPx or
+        chosen["postRotation"].getInt != best.postRotation:
       fail(Record & " records a different config than this sweep picked")
     if recorded["grid"].len != rows.len:
       fail(Record & " records a different grid than this sweep ran")
