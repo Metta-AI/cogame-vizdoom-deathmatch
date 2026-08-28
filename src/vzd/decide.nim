@@ -483,6 +483,13 @@ proc turn*(
   var views = initTable[int, JsonNode]()
   for seat in open:
     views[seat] = engine.seatViewNode(sim, seat, turnIndex, turnsPerGame)
+    ## The map rides this seat's FIRST prompt and never again. `mapSent`
+    ## records that it was SENT, which is what the design note pins ("the map,
+    ## once, at its first turn"); marking it on a successful PARSE instead
+    ## meant a seat whose reply timed out re-sent fifteen zones on every turn
+    ## for the rest of the episode.
+    if seat < engine.mapSent.len:
+      engine.mapSent[seat] = true
 
   # --- up to two PARALLEL batches ------------------------------------------
   var attempt = 0
@@ -547,7 +554,6 @@ proc turn*(
         engine.notes[seat] = directive.note
         if cogIndex < engine.radio.len:
           engine.radio[cogIndex] = directive.radio
-        engine.mapSent[seat] = true
       except CatchableError as error:
         if responses[position].error.len > 0:
           cause = (if "timeout" in responses[position].error.toLowerAscii():

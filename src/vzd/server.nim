@@ -1961,10 +1961,20 @@ proc runServerLoop*(
           of dsLlm: inc sim.llmTurns[min(seat, sim.llmTurns.high)]
           of dsFallback: inc sim.fallbackTurns[min(seat, sim.fallbackTurns.high)]
           of dsScripted: discard
+          ## No seat view is passed. `MaxDirectiveRunes = 900` cannot hold
+          ## one — sixteen rays, a contact list, a three-mate block, a score
+          ## block and, on a seat's first turn, fifteen zones is well past the
+          ## cap — so `boundedDirectiveRecord`'s shrink order dropped it from
+          ## every record it has ever written (0 of the 80 records in the CI
+          ## replay of run 33126418568 carry a `view` key). Building it here
+          ## bought nothing and cost a `seatViewNode` per seat per turn, each
+          ## one re-scanning the wall mask for all fifteen zones: ~2.4 M
+          ## lattice reads an episode. It also carried `your_notes` — the
+          ## seat's PRIVATE note — into a record the design note defines as
+          ## the observation MINUS `your_notes`.
           let record = directive.boundedDirectiveRecord(
             sim.gameIndex + 1, turnIndex, seat,
-            teamText(sim.teamForSlot(seat)), sim.cogAlias(seat),
-            engine.seatViewNode(sim, seat, turnIndex, turnsPerGame))
+            teamText(sim.teamForSlot(seat)), sim.cogAlias(seat))
           replayWriter.writeChat(tickTime(sim.tickCount), seat, record)
           sim.pushFeedDirective(record)
           sim.emitEvent(
