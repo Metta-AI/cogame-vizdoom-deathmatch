@@ -261,6 +261,25 @@ suite "reply validation":
     check validateUtf8(directive.radio) == -1
     check validateUtf8(directive.note) == -1
 
+  test "the provider's reply is capped in BYTES, on a rune boundary":
+    ## design.md's table says "whole reply | BYTES | <= 4096 read from the
+    ## provider before parsing". A RUNE cap of 4096 would admit 16 KiB of
+    ## 4-byte code points, so the cut is by byte and then backed up off any
+    ## continuation byte.
+    let emoji = "\u{1F480}"                     ## four UTF-8 bytes each
+    var huge = ""
+    for _ in 0 ..< MaxReplyBytes: huge.add(emoji)
+    check huge.len == MaxReplyBytes * 4
+    let capped = huge.truncateBytes(MaxReplyBytes)
+    check capped.len <= MaxReplyBytes
+    check capped.len > MaxReplyBytes - 4       ## and it does not under-cut
+    check validateUtf8(capped) == -1           ## never half a code point
+    check capped.runeLen == MaxReplyBytes div 4
+    ## An ASCII reply inside the cap is passed through untouched, so the
+    ## parser sees exactly what the model sent.
+    let small = "{\"intent\": \"hunt\", \"at\": \"C2\"}"
+    check small.truncateBytes(MaxReplyBytes) == small
+
   test "the whole directive record stays inside MaxDirectiveRunes":
     var padding = ""
     for _ in 0 ..< 400: padding.add("\u{1F480}")

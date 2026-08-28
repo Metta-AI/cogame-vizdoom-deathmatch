@@ -531,7 +531,7 @@ proc turn*(
             if cogIndex < sim.players.len: sim.players[cogIndex]
             else: Player()
         var directive = parseSeatDirective(
-          extractJsonObject(text.truncateRunes(MaxReplyBytes)),
+          extractJsonObject(text.truncateBytes(MaxReplyBytes)),
           cogIndex, sim.cogAlias(cogIndex), seen.ids, seen.xs, seen.ys,
           self.x + CollisionW div 2, self.y + CollisionH div 2,
           MapWidth - 1, MapHeight - 1)

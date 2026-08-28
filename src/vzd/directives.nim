@@ -79,6 +79,23 @@ proc truncateRunes*(text: string, limit: int): string =
     return text
   text.runeSubStr(0, limit)
 
+proc truncateBytes*(text: string, limit: int): string =
+  ## Cuts `text` to at most `limit` BYTES, backing up to a rune boundary.
+  ##
+  ## This is the cap on the PROVIDER'S REPLY (`MaxReplyBytes`), which the
+  ## design note states in bytes: a rune cap of 4096 would admit 16 KiB of
+  ## 4-byte code points. Backing up off a continuation byte (`10xxxxxx`) is
+  ## what keeps the cut from splitting a code point, so what reaches
+  ## `extractJsonObject` is always valid UTF-8.
+  if limit <= 0:
+    return ""
+  if text.len <= limit:
+    return text
+  var cut = limit
+  while cut > 0 and (uint8(text[cut]) and 0b1100_0000'u8) == 0b1000_0000'u8:
+    dec cut
+  text[0 ..< cut]
+
 proc sanitizeSay*(text: string): string =
   ## A cog's shout: capped at MaxSayRunes on a rune boundary FIRST, then run
   ## through the starter's printable-ASCII shout sanitiser. Doing it in that
