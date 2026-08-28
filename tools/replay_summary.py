@@ -162,7 +162,15 @@ def summarise(path: str) -> dict:
         "names": names,
         "aliases": aliases,
         "policyKinds": [r.get("kind", "") for r in registers],
-        "tickCount": len(data),
+        # TICKS, not bytes. This file cannot decode the record framing (that is
+        # the whole point of the brace-matching technique above), so the tick
+        # count comes from the two records that carry one: the terminal
+        # `result` record's `finalTick`, else the `stop` record's tick.
+        "tickCount": int(
+            results.get("finalTick")
+            or (stops[-1].get("tick") if stops else 0)
+            or 0),
+        "byteCount": len(data),
         "directives": directives,
         "radio": radio,
         "shouts": shouts,
