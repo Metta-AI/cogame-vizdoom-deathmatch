@@ -292,6 +292,32 @@ suite "reply validation":
     check validateUtf8(record) == -1
     discard parseJson(record)                   ## and it is still valid JSON
 
+suite "the rusher shouts on the change, not every turn":
+  test "\"on it\" is emitted once, on the turn the intent becomes hunt":
+    ## design.md's baseline table: `say` = "on it" ON THE TURN THE INTENT
+    ## CHANGES to `hunt`. Emitting it every hunting turn filled the replay's
+    ## directive records with 21 identical shouts in the certification
+    ## episode.
+    var sim = newDeathmatchSim()
+    var ctl = initControlState(sim)
+    sim.placeCog(0, MapWidth div 2, MapHeight div 2, 0)
+    sim.placeCog(1, MapWidth div 2 + 60, MapHeight div 2, 0)
+    ctl.observeEnemies(sim)
+    let first = scriptedDirective(ctl, sim, blRusher, @[0])
+    check first.orders[0].intent == intHunt
+    check first.orders[0].say == "on it"
+    ## Same world, but the cog was ALREADY hunting: it says nothing.
+    let again = scriptedDirective(
+      ctl, sim, blRusher, @[0], DefaultBaselineParams, first)
+    check again.orders[0].intent == intHunt
+    check again.orders[0].say == ""
+    ## A cog that was holding and now hunts shouts again.
+    var held = SquadDirective(orders: @[CogOrder(
+      cogIndex: 0, intent: intHold)])
+    let resumed = scriptedDirective(
+      ctl, sim, blRusher, @[0], DefaultBaselineParams, held)
+    check resumed.orders[0].say == "on it"
+
 suite "the derived rate floor and the budget guard":
   test "effectiveSpacingMs is 5000 at 2 seats and 17143 at 8":
     check effectiveSpacingMs(5000, 0) == 5000

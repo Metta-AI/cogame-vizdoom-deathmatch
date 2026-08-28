@@ -138,19 +138,30 @@ proc postAnchors*(sim: SimServer, team: Team): array[4, tuple[x, y: int]] =
    (inward, top),
    (inward, bottom)]
 
+proc standingIntent(previous: SquadDirective, cogIndex: int): (bool, Intent) =
+  ## This cog's intent in the seat's PREVIOUS directive, if it had one.
+  for order in previous.orders:
+    if order.cogIndex == cogIndex:
+      return (true, order.intent)
+  (false, intHunt)
+
 proc scriptedDirective*(
   ctl: ControlState,
   sim: SimServer,
   kind: Baseline,
   governed: seq[int],
-  params = DefaultBaselineParams
+  params = DefaultBaselineParams,
+  previous = SquadDirective()
 ): SquadDirective =
   ## The order one baseline issues for the cog it governs this turn.
   ##
   ## `rusher` — first matching rule wins:
   ##   1. dead -> `hold` at the team's spawn anchor, facing the map centre;
   ##   2. a live enemy known within `rusherHuntPx` -> `hunt` it, and say
-  ##      "on it" on the turn the intent becomes `hunt`;
+  ##      "on it" ON THE TURN THE INTENT BECOMES `hunt` — `previous` is the
+  ##      seat's last directive, and a cog that was already hunting says
+  ##      nothing, so the shout marks the moment a marine commits rather than
+  ##      repeating every turn it stays in contact;
   ##   3. own hp <= 1 and a live med kit within `medPx` -> `move_to` it;
   ##   4. otherwise -> `move_to` the CONTESTED zone.
   ##
@@ -202,7 +213,9 @@ proc scriptedDirective*(
       order.targetX = enemy.x
       order.targetY = enemy.y
       order.hasFace = false
-      order.say = "on it"
+      let standing = standingIntent(previous, cogIndex)
+      if not (standing[0] and standing[1] == intHunt):
+        order.say = "on it"
     else:
       let kit = sim.nearestMedKit(cogIndex, params.medPx)
       if self.hp <= 1 and kit.found:

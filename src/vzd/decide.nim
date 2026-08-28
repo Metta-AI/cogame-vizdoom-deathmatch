@@ -252,19 +252,31 @@ proc budgetGuardRecord(turn, remainingSeconds: int): string =
 #  The turn
 # ---------------------------------------------------------------------------
 
+proc standingDirective(engine: DecisionEngine, seat: int): SquadDirective =
+  ## The seat's directive from the previous turn, or an empty one. The
+  ## baselines use it to shout only when an intent CHANGES.
+  if seat >= 0 and seat < engine.directives.len and
+      seat < engine.haveDirective.len and engine.haveDirective[seat]:
+    engine.directives[seat]
+  else:
+    SquadDirective()
+
 proc scriptedFor(
   engine: DecisionEngine, sim: SimServer, seat: int, kind: Baseline
 ): SquadDirective =
-  scriptedDirective(engine.ctl, sim, kind, sim.commandedCogs(seat))
+  scriptedDirective(engine.ctl, sim, kind, sim.commandedCogs(seat),
+    DefaultBaselineParams, engine.standingDirective(seat))
 
 proc rusherFor*(
-  engine: DecisionEngine, sim: SimServer, cogs: seq[int]
+  engine: DecisionEngine, sim: SimServer, cogs: seq[int],
+  seat = -1
 ): SquadDirective =
   ## The published `rusher` order for an arbitrary cog set. THE SAME PROC the
   ## `rusher` baseline uses — imported, never duplicated — so the fallback and
   ## the published baseline cannot drift; tests/test_vzd_control.nim asserts
   ## they resolve to the same order for the same world.
-  scriptedDirective(engine.ctl, sim, blRusher, cogs)
+  scriptedDirective(engine.ctl, sim, blRusher, cogs,
+    DefaultBaselineParams, engine.standingDirective(seat))
 
 proc effectiveSpacingMs*(configured, llmSeats: int): int =
   ## THE NAMED EDIT to the rate floor. The Bedrock sidecar caps 30 requests a
@@ -292,7 +304,7 @@ proc repairMissingOrder*(
   ## repairing to a default here rather than to the standing order would
   ## abandon a held post every time a commander only talked.
   if directive.orders.len == 0:
-    directive.orders = engine.rusherFor(sim, sim.commandedCogs(seat)).orders
+    directive.orders = engine.rusherFor(sim, sim.commandedCogs(seat), seat).orders
     return
   if directive.orders[0].fromReply:
     return
@@ -303,7 +315,7 @@ proc repairMissingOrder*(
         directive.orders[0] = old
         directive.orders[0].say = keptSay
         return
-  let fallback = engine.rusherFor(sim, sim.commandedCogs(seat))
+  let fallback = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
   if fallback.orders.len > 0:
     let keptSay = directive.orders[0].say
     directive.orders[0] = fallback.orders[0]
@@ -437,7 +449,7 @@ proc turn*(
       # scripted policy, and the design's `fallback.cause` enum names both
       # reasons it happens (`no_credentials`, `budget_guard`). Recording it is
       # what makes the two countable.
-      var directive = engine.rusherFor(sim, sim.commandedCogs(seat))
+      var directive = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
       directive.source = dsFallback
       engine.directives[seat] = directive
       engine.haveDirective[seat] = true
@@ -455,7 +467,7 @@ proc turn*(
       engine.haveDirective[seat] = true
 
   for seat in rateBlocked:
-    var directive = engine.rusherFor(sim, sim.commandedCogs(seat))
+    var directive = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
     directive.source = dsFallback
     engine.directives[seat] = directive
     engine.haveDirective[seat] = true
@@ -579,7 +591,7 @@ proc turn*(
 
   # --- anything still open plays rusher for this turn -----------------------
   for seat in open:
-    var directive = engine.rusherFor(sim, sim.commandedCogs(seat))
+    var directive = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
     directive.source = dsFallback
     engine.directives[seat] = directive
     engine.haveDirective[seat] = true

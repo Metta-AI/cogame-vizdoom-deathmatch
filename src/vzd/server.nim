@@ -2006,7 +2006,8 @@ proc runServerLoop*(
           # Either this cog is a scripted teammate in a `visitor` game, or its
           # seat has no directive yet. It plays the published `rusher`
           # baseline, which is the same proc the server-side fallback uses.
-          let scripted = engine.rusherFor(sim, @[cogIndex])
+          let scripted = engine.rusherFor(
+            sim, @[cogIndex], sim.cogSeat(cogIndex))
           if scripted.orders.len > 0:
             order = scripted.orders[0]
             found = true
