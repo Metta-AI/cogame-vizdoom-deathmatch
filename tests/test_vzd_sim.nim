@@ -2,7 +2,8 @@
 ## arithmetic invariants the objective layer rests on.
 
 import
-  std/[math, os, strutils],
+  std/[json, math, os, strutils],
+  vzd/broadcast,
   vzd_helpers,
   std/unittest
 
@@ -121,19 +122,37 @@ suite "vision and the depth strip":
       check ray.wall <= sim.visionRange()
       check ray.wall >= -1
 
-  test "the model and the viewer read the SAME walls":
-    ## marchRays is the one ray march in the repo: the 16-column strip the LLM
-    ## reads and the 96-column strip broadcast.nim's firstPersonJson draws are
-    ## the same proc at two resolutions, so their shared bearings must agree.
+  test "the model's 16 rays and the viewer's 96 columns read the SAME walls":
+    ## design.md test 7. marchRays is the one ray march in the repo: the
+    ## 16-column strip the LLM reads and the 96-column strip the viewer's
+    ## `fp` inset draws are the same proc at two resolutions. Column i of 16
+    ## and column 19i/3 of 96 are the SAME bearing
+    ## (i/15 == j/95 <=> j == 19i/3), so at every third ray the two strips
+    ## must report the identical wall distance — compared here through
+    ## `buildStateJson`, the wire the viewer actually reads, not through a
+    ## second call to the same proc.
     var sim = newDeathmatchSim()
     for cogIndex in 0 ..< sim.players.len:
-      let
-        narrow = sim.marchRays(cogIndex, 3, sim.visionRange())
-        wide = sim.marchRays(cogIndex, 3, sim.visionRange())
-      check narrow.len == 3
-      for i in 0 ..< 3:
-        check narrow[i].wall == wide[i].wall
-        check abs(narrow[i].offsetBrads - wide[i].offsetBrads) < 0.001
+      let narrow = sim.marchRays(cogIndex, EgoRayColumns, sim.visionRange())
+      check narrow.len == EgoRayColumns
+      let state = parseJson(sim.buildStateJson(
+        newJArray(), true, 1, 1080, false, true, -1,
+        sim.players[cogIndex].joinOrder))
+      check state.hasKey("fp")
+      let cols = state["fp"]["cols"]
+      check cols.len == 96
+      var compared = 0
+      for i in countup(0, EgoRayColumns - 1, 3):
+        let
+          j = 19 * i div 3
+          column = cols[j]
+          wide =
+            if column.kind == JArray: column[0].getInt()
+            else: column.getInt()
+        checkpoint("cog " & $cogIndex & " ray " & $i & " column " & $j)
+        check narrow[i].wall == wide
+        inc compared
+      check compared == 6
 
   test "aim carries vision: rotating without moving changes the strip":
     var sim = newDeathmatchSim()
