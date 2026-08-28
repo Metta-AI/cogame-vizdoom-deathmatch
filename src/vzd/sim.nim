@@ -1662,7 +1662,11 @@ proc applyFire(sim: var SimServer, shot: PendingGunShot) =
     )
     if sim.players[targetIndex].hp <= 0:
       sim.killPlayer(targetIndex, shooterIndex)
-      sim.recordKill(shooterIndex)
+      ## `frags` counts ENEMY kills only. A team kill is charged to the killer
+      ## as a LOST frag (`net = frags - teamFrags - deaths`), so crediting it
+      ## as a frag first would cancel the charge and make friendly fire free.
+      if sim.players[shooterIndex].team != sim.players[targetIndex].team:
+        sim.recordKill(shooterIndex)
       sim.recordTeamKill(shooterIndex, targetIndex)
       sim.emitEvent(
         Kill, source = shooterIndex, target = targetIndex, weapon = "gun",

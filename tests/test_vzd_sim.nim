@@ -165,6 +165,33 @@ suite "frag accounting":
     ## Every death has exactly one cause.
     check deaths == kills + teamKills
 
+  test "a team kill calls recordTeamKill and NOT recordKill":
+    ## design.md test 4. `frags` counts kills of ENEMY cogs only: a team kill
+    ## is charged to the killer as a lost frag through the `- teamFrags` term
+    ## of `net`, so crediting it as a frag as well would cancel the charge and
+    ## make friendly fire free for the killer.
+    var sim = newDeathmatchSim(deathmatchConfigJson(maxTicks = 240))
+    let
+      centreX = MapWidth div 2
+      centreY = MapHeight div 2
+    ## Slot parity is the team, so seats 0 and 2 are both RED.
+    check sim.players[0].team == sim.players[2].team
+    sim.placeCog(0, centreX - 40, centreY, 0)      ## aimed east
+    sim.placeCog(2, centreX, centreY, 0)
+    let prev = sim.none()
+    var ticks = 0
+    while sim.players[2].alive and ticks < 200:
+      if sim.players[0].fireWindup == 0:
+        sim.players[0].fireCooldown = 0
+        sim.tryFire(0)
+      sim.step(sim.none(), prev)
+      inc ticks
+    check not sim.players[2].alive
+    check sim.players[0].kills == 0            ## no frag for a teammate
+    check sim.players[0].teamKills == 1
+    check sim.players[2].deaths == 1
+    check sim.netFor(0) == -1                  ## the killer is charged
+
 suite "no new floats in hashed code":
   test "deathmatch.nim and zones.nim carry no float literal, no / and no sqrt":
     for name in ["deathmatch", "zones"]:
