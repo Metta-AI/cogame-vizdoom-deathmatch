@@ -510,6 +510,21 @@ proc advanceReplayGame(sim: var SimServer) =
   sim.regime = sim.config.regimes[
     min(sim.gameIndex, sim.config.regimes.high)]
 
+proc applyTrailingStop*(replay: ReplayPlayer, sim: var SimServer) =
+  ## Applies a `stop` record that sits PAST the last recorded hash.
+  ##
+  ## The fault stops are written one tick beyond the chain by construction:
+  ## the tick that raised never completed, so the server never wrote its hash,
+  ## and playback stops stepping the moment the chain is exhausted. Without
+  ## this the recording would simply run out with the sim still `Playing` —
+  ## no `gameover`, no endcard, on exactly the episodes a spectator most needs
+  ## explained. Idempotent: once the game is over nothing else applies.
+  if sim.phase == GameOver:
+    return
+  for index in replay.chatIndex ..< replay.data.chats.len:
+    if sim.applyStopRecord(replay.data.chats[index].message):
+      break
+
 proc stepReplay*(replay: var ReplayPlayer, sim: var SimServer) =
   ## Advances replay by one simulation tick.
   replay.clearReplayPressedMasks()
@@ -934,6 +949,13 @@ proc advanceReplayPlayback*(
       replay.stepReplay(sim)
       onStep()
       inc stepsTaken
+    if not replay.playing:
+      ## The chain is spent. A fault stop is recorded one tick PAST the last
+      ## hash (the tick that raised never produced one), so it is applied
+      ## here, on the frame playback ends, rather than being left unread with
+      ## the sim still Playing.
+      replay.applyTrailingStop(sim)
+      onStep()
     if replay.looping and not replay.playing:
       # Playback just reached the end: begin the end-segment hold.
       replay.endHoldFrames = ReplayEndHoldSeconds * ReplayFps

@@ -225,7 +225,7 @@ type Rederived = object
   endRule: string
   finalTick: int
 
-proc rederive(path: string, extraSteps = 4): Rederived =
+proc rederive(path: string): Rederived =
   ## Re-simulates the recorded bytes through the runtime the wasm viewer uses.
   ## `checkReplayHash` compares the re-derived `gameHash` against the recorded
   ## one at EVERY tick; the per-tick table below re-asserts it independently
@@ -244,13 +244,12 @@ proc rederive(path: string, extraSteps = 4): Rederived =
     runtime.player.stepReplay(runtime.sim)
     derived[runtime.sim.tickCount] = runtime.sim.gameHash()
     inc guard
-  ## A `stop` record sits one or two frames past the last hash on the fault
-  ## path, so playback has to be allowed to reach it — exactly as the viewer's
-  ## own presentation loop does.
-  var extra = 0
-  while runtime.sim.phase != GameOver and extra < extraSteps:
-    runtime.player.stepReplay(runtime.sim)
-    inc extra
+  ## Nothing is stepped past the end of the chain: this is exactly where the
+  ## viewer's presentation loop stops (`checkReplayHash` clears `playing`), so
+  ## the state asserted below is the state a spectator is left looking at —
+  ## including the trailing `stop`, which `advanceReplayPlayback` applies on
+  ## the frame the chain runs out, through this same proc.
+  runtime.player.applyTrailingStop(runtime.sim)
   result.recorded = data.hashes.len
   result.mismatchTick = runtime.player.hashMismatchTick
   result.failed = runtime.player.hashValidationFailed
