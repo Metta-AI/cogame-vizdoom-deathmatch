@@ -776,7 +776,11 @@ proc deathmatchResultsJson*(sim: SimServer): string =
   results["shotsHit"] = shotsHit
   results["medkits"] = medkits
   results["longestStreak"] = longestStreak
-  results["map"] = %sim.config.mapPath
+  ## The RESOLVED map, not the config's request: `mapPath: "pool"` draws a
+  ## generated entry from the seed, and `results.map` has to name the map the
+  ## episode was actually played on (`gen-1004`), not the pool it came from.
+  results["map"] = %(
+    if sim.gameMap.name.len > 0: sim.gameMap.name else: sim.config.mapPath)
   results["policyKinds"] = policyKinds
   results["crossPlay"] = %(sawLlm and sawScripted)
   results["llmTurns"] = llmTurns

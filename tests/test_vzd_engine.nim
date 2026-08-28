@@ -67,6 +67,9 @@ suite "an episode runs to full time and settles":
       1e-9
     check doc["finalTick"].getInt() > 0
     check doc["map"].getStr() == "arena"
+    ## `results.map` is the RESOLVED map, not the config's request: on the
+    ## pool variant the same field names the entry the seed drew.
+    check run.sim.gameMap.name == "arena"
     check doc["seed"].getInt() == 42
 
   test "no episode over many seeds ever reports mercy or wipe":
@@ -112,6 +115,15 @@ suite "determinism":
     check run.sim.gameHash() != before
 
 suite "the pool variant is a pure function of the seed":
+  test "results.map names the RESOLVED pool entry, not the pool":
+    var sim = newDeathmatchSim(deathmatchConfigJson(
+      maxTicks = 120, mapPath = "pool", seed = 4711))
+    check sim.config.mapPath == "pool"
+    check sim.gameMap.name.len > 0
+    check sim.gameMap.name != "pool"
+    let doc = parseJson(sim.playerResultsJson())
+    check doc["map"].getStr() == sim.gameMap.name
+
   test "two sims with the same seed install the same map":
     let a = newDeathmatchSim(deathmatchConfigJson(
       maxTicks = 120, mapPath = "pool", seed = 4711))
