@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vizdoom-deathmatch renderer fixture — worst-case model text</title>
+<!--
+  THE WORST-CASE RENDERER FIXTURE (acceptance checklist item 15; design note
+  test 43).
+
+  WHY IT EXISTS. `tools/ci/docker_smoke.sh` runs with NO `ANTHROPIC_API_KEY`,
+  so every seat in the only replay CI can produce falls back to the scripted
+  baseline, and a scripted baseline emits no `radio` and no `say`. The
+  `wasm-viewer` job's `viewer_smoke.mjs` run therefore never lays out one
+  character of model-authored text — the whole class of chrome that exists to
+  show what a model said is untested by every other gate (the cogchemists
+  2026-08-24 scar: four speech bubbles drawn at a negative y, four sentences
+  rendered as four white slivers, everything green).
+
+  WHAT IT DOES. It loads the SHIPPED bundle's own `index.html` in an iframe and
+  shims ONLY the wasm entry (`window.VzdStaticReplay.createCore`): the page
+  under test is the real page, with the real `chrome_common.js`, the real CSS
+  and the real game block. Nothing is re-implemented here (the particle-worlds
+  2026-08-26 scar). It then hands that page `renderer_fixture_frame.json`, a
+  frame emitted by `buildStateJson` itself
+  (`tools/gen_renderer_fixture_frame.nim`), in which every seat is speaking at
+  exactly the caps the server enforces: 96 runes of `radio` on ALL EIGHT seats
+  at once, 10 runes of `say`, 160 runes of `note`, the widest policy names, a
+  fallback row, eight eyes thumbnails, a full momentum series and a full beat
+  list. It renders that frame at 360, 640 and 1280 px.
+
+  HOW IT FAILS, two independent ways:
+   1. Its own layout assertions set `data-replay-error`, which
+      `viewer_smoke.mjs` fails fast on and prints. Every string is measured as
+      the browser actually laid it out — per LINE BOX, through the Range API —
+      so a wrapped remark is judged on where its lines really are, not on a
+      guess about its font.
+   2. Every one of those line boxes is MIRRORED onto a real 2D canvas the size
+      of the viewport, at the box the layout gave it. That is what gives
+      `viewer_smoke.mjs --strict-text-bounds` something to measure on a DOM
+      renderer: a line that lies outside the frame is drawn outside the canvas
+      on every pass and lands in `canvas_text.never_inside`.
+
+  It also asserts its own strings are still full length — a quietly shortened
+  remark would leave it passing while testing nothing.
+-->
+<style>
+  /* The page's own fonts, so a mirrored string is measured in the font it was
+     drawn in rather than in a fallback with different metrics. */
+  @font-face {
+    font-family: 'rajdhani';
+    src: url('./font.ttf') format('truetype');
+    font-display: block;
+  }
+  html, body { margin: 0; background: #101014; color: #e8e8ee;
+    font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  #log { padding: 8px 12px; white-space: pre-wrap; }
+  #host { position: relative; }
+  #host iframe { border: 0; display: block; background: #000; }
+  /* Present and painted (a display:none canvas would still record draws, but
+     an invisible one is honest about being a measuring instrument). */
+  #mirror { position: absolute; left: 0; top: 0; pointer-events: none;
+    opacity: 0.002; }
+  .bad { color: #ff6b6b; }
+  .ok { color: #7ddc7d; }
+</style>
+</head>
+<body>
+<div id="log">renderer fixture: booting…</div>
+<div id="host"><canvas id="mirror" width="16" height="16"></canvas></div>
+<script>
+(function () {
+  'use strict';
+
+  // The three widths the design note names. 360 px is the embedded
+  // featured-match width on softmax.com, and it is the one that hurts.
+  var VIEWS = [
+    { w: 360, h: 640 },
+    { w: 640, h: 800 },
+    { w: 1280, h: 800 }
+  ];
+  // The caps src/vzd/sim_types.nim enforces on model-authored strings.
+  var CAPS = { radio: 96, say: 10 };
+  // The chrome that carries model text or names, plus everything else the
+  // frame paints into the HUD.
+  var SELECTORS = [
+    '#killfeed .feed-row', '#killfeed .dm-radio', '#killfeed .who',
+    '#killfeed .badge', '#eyes .dm-eye', '.plate-name', '#clock', '#fragbug',
+    '#banners .banner-chip', '#chrome *', '#scorebug *', '#killfeed *',
+    '#eyes *'
+  ];
+
+  var log = document.getElementById('log');
+  var failures = [];
+  function say(text, cls) {
+    var div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text;
+    log.appendChild(div);
+    if (cls === 'bad') console.error(text); else console.log(text);
+  }
+  function fail(text) { failures.push(text); say('FAIL ' + text, 'bad'); }
+  function finish() {
+    if (failures.length) {
+      document.documentElement.setAttribute(
+        'data-replay-error',
+        failures.length + ' layout failure(s): ' + failures[0]);
+    } else {
+      document.documentElement.setAttribute('data-replay-loaded', 'true');
+    }
+  }
+  function runes(text) { return Array.from(String(text || '')).length; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // ------------------------------------------------------------------
+  // The shim. It replaces the wasm entry and NOTHING else, so the page keeps
+  // its own `coreConfig` and `__fixtureConfig.onText` below is the page's real
+  // frame ingest.
+  // ------------------------------------------------------------------
+  var SHIM = [
+    '<script>(function(){',
+    '  var transform = { scale: 1, offsetX: 0, offsetY: 0, nativeW: 1235,',
+    '    nativeH: 659, zoom: 1, minZoom: 1, maxZoom: 12, fitScale: 1,',
+    '    focusX: 617, focusY: 329, visW: 1235, visH: 659 };',
+    '  var core = {',
+    '    start: function () {}, stop: function () {},',
+    '    sendCommand: function () {}, clickMap: function () {},',
+    '    zoomAt: function () {}, setZoom: function () {},',
+    '    panBy: function () {}, panByMap: function () {},',
+    '    panTo: function () {}, resetView: function () {},',
+    '    attachMinimap: function () {},',
+    '    getTransform: function () { return transform; },',
+    '    setViewportFit: function () {},',
+    '    getPaceStats: function () {',
+    '      return { enabled: false, queued: 0, presented: 0,',
+    '        interval: 41.6, draws: 1 };',
+    '    }',
+    '  };',
+    '  var shim = { createCore: function (config) {',
+    '    window.__fixtureConfig = config;',
+    '    return core;',
+    '  } };',
+    '  Object.defineProperty(window, "VzdStaticReplay", {',
+    '    configurable: true,',
+    '    get: function () { return shim; },',
+    '    set: function () { /* the wasm adapter IS the shimmed part */ }',
+    '  });',
+    '})();<\/script>'
+  ].join('\n');
+
+  function shimmed(html) {
+    var at = html.indexOf('<head>');
+    if (at < 0) throw new Error('bundle index.html has no <head>');
+    return html.slice(0, at + 6) + '\n' + SHIM + html.slice(at + 6);
+  }
+
+  // ------------------------------------------------------------------
+  // Layout reading.
+  // ------------------------------------------------------------------
+  function visible(win, el) {
+    var node = el;
+    while (node && node.nodeType === 1) {
+      var style = win.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      if (parseFloat(style.opacity) < 0.05) return false;
+      node = node.parentElement;
+    }
+    return true;
+  }
+
+  // The nearest ancestor that CLIPS: text outside it is invisible, however
+  // comfortably it sits inside the frame.
+  function clipper(win, el) {
+    var node = el.parentElement;
+    while (node && node.nodeType === 1) {
+      var style = win.getComputedStyle(node);
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  // One entry per LINE BOX of one element's own text, with the rect the
+  // browser actually gave that line. This is what makes a wrapped remark
+  // measurable: its lines are where they are, whatever the font metrics of
+  // whoever is measuring.
+  function lineBoxes(win, el) {
+    var doc = win.document;
+    var out = [];
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var node = el.childNodes[i];
+      if (node.nodeType !== 3) continue;
+      var text = node.nodeValue;
+      if (!text || !text.trim()) continue;
+      var range = doc.createRange();
+      var start = -1;
+      var top = null;
+      var rect = null;
+      for (var c = 0; c < text.length; c++) {
+        var box = null;
+        try {
+          range.setStart(node, c);
+          range.setEnd(node, c + 1);
+          box = range.getBoundingClientRect();
+        } catch (ignore) { box = null; }
+        if (!box || (box.width === 0 && box.height === 0)) continue;
+        if (top === null || Math.abs(box.top - top) > 1) {
+          if (start >= 0 && rect) {
+            out.push({ text: text.slice(start, c), rect: rect });
+          }
+          start = c;
+          top = box.top;
+          rect = { left: box.left, top: box.top, right: box.right,
+                   bottom: box.bottom };
+        } else {
+          rect.left = Math.min(rect.left, box.left);
+          rect.top = Math.min(rect.top, box.top);
+          rect.right = Math.max(rect.right, box.right);
+          rect.bottom = Math.max(rect.bottom, box.bottom);
+        }
+      }
+      if (start >= 0 && rect) out.push({ text: text.slice(start), rect: rect });
+    }
+    return out;
+  }
+
+  function collect(win) {
+    var doc = win.document;
+    var seen = new Set();
+    var out = [];
+    SELECTORS.forEach(function (selector) {
+      Array.prototype.forEach.call(doc.querySelectorAll(selector),
+        function (el) {
+          if (seen.has(el)) return;
+          seen.add(el);
+          if (!visible(win, el)) return;
+          var boxes = lineBoxes(win, el);
+          if (!boxes.length) return;
+          var style = win.getComputedStyle(el);
+          var size = parseFloat(style.fontSize) || 12;
+          out.push({
+            el: el,
+            sentence: el.classList.contains('dm-radio') ||
+              el.classList.contains('dm-say'),
+            family: style.fontFamily,
+            size: size,
+            clip: clipper(win, el),
+            box: el.getBoundingClientRect(),
+            // The BAND the layout reserved for this string. A remark belongs
+            // inside the feed's own column; a spectator reads it there,
+            // against the feed's background, not painted across the board.
+            band: el.closest('#killfeed, #banners, #endcard'),
+            boxes: boxes
+          });
+        });
+    });
+    return out;
+  }
+
+  // ------------------------------------------------------------------
+  // The mirror. Each line box is drawn at the position the layout gave it,
+  // with the font scaled so the mirrored advance is exactly the real one —
+  // so a line inside the frame can never be reported outside it, and a line
+  // outside the frame always is.
+  // ------------------------------------------------------------------
+  function mirror(ctx, entry) {
+    entry.boxes.forEach(function (box) {
+      var width = box.rect.right - box.rect.left;
+      ctx.font = entry.size + 'px ' + entry.family;
+      var natural = ctx.measureText(box.text).width;
+      if (natural > width + 0.5 && natural > 0) {
+        ctx.font = (entry.size * (width / natural)) + 'px ' + entry.family;
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(box.text, box.rect.left, box.rect.bottom);
+    });
+  }
+
+  function check(view, entries) {
+    var offFrame = 0;
+    var clipped = 0;
+    entries.forEach(function (entry) {
+      entry.boxes.forEach(function (box) {
+        var r = box.rect;
+        if (r.right > view.w + 1 || r.left < -1 ||
+            r.bottom > view.h + 1 || r.top < -1) {
+          offFrame += 1;
+          fail('at ' + view.w + 'px a drawn line leaves the frame: "' +
+            box.text.slice(0, 40) + '" at [' + Math.round(r.left) + ',' +
+            Math.round(r.top) + ',' + Math.round(r.right) + ',' +
+            Math.round(r.bottom) + '] in ' + view.w + 'x' + view.h);
+        }
+        // A remark that spills out of the BAND the layout reserved for it is
+        // painting across whatever is behind the feed instead of reading
+        // against the feed's own background. The band is what has to grow
+        // (checklist item 15: widen the band, do not shorten the text), which
+        // is why #killfeed reserves the height and .dm-radio wraps inside the
+        // column instead of running along one line.
+        if (entry.sentence && entry.band) {
+          var b = entry.band.getBoundingClientRect();
+          var spill = Math.max(r.right - b.right, b.left - r.left);
+          if (spill > 1) {
+            fail('at ' + view.w + 'px a model remark spills ' +
+              Math.round(spill) + 'px out of the ' +
+              (entry.band.id || entry.band.className) + ' band (' +
+              Math.round(b.width) + 'px wide): no room was reserved for a ' +
+              'full-cap remark');
+          }
+        }
+        if (entry.clip) {
+          var c = entry.clip.getBoundingClientRect();
+          var over = Math.max(r.right - c.right, c.left - r.left);
+          // A LABEL may be cut by its own box (a policy name ellipsized in a
+          // 3.2em plate is a design choice); a SENTENCE may not — a clipped
+          // remark means the box is too small, and the answer is a wider
+          // band, never a shorter remark (checklist item 15).
+          if (over > 1 && entry.sentence) {
+            clipped += 1;
+            fail('at ' + view.w + 'px a model remark is cut off by ' +
+              Math.round(over) + 'px inside ' +
+              (entry.clip.id || entry.clip.className) + ': "' +
+              box.text.slice(0, 40) + '"');
+          }
+        }
+      });
+    });
+    return { offFrame: offFrame, clipped: clipped };
+  }
+
+  function report(view, entries) {
+    var lines = 0;
+    var sentences = 0;
+    var widest = 0;
+    entries.forEach(function (entry) {
+      lines += entry.boxes.length;
+      if (!entry.sentence) return;
+      sentences += 1;
+      entry.boxes.forEach(function (box) {
+        widest = Math.max(widest, box.rect.right - box.rect.left);
+      });
+      var first = entry.boxes[0].rect;
+      var last = entry.boxes[entry.boxes.length - 1].rect;
+      say('  at ' + view.w + 'px a full-cap remark occupies ' +
+        entry.boxes.length + ' line(s), ' +
+        Math.round(first.left) + ',' + Math.round(first.top) + ' to ' +
+        Math.round(last.right) + ',' + Math.round(last.bottom));
+    });
+    say('at ' + view.w + 'px: ' + entries.length + ' text elements, ' +
+      lines + ' line boxes, ' + sentences + ' full-cap remarks, widest line ' +
+      Math.round(widest) + 'px');
+    return lines;
+  }
+
+  async function main() {
+    var frame, html;
+    try {
+      frame = await (await fetch('./renderer_fixture_frame.json')).json();
+      html = await (await fetch('./index.html')).text();
+    } catch (error) {
+      fail('could not load the bundle or the frame: ' + error.message);
+      finish();
+      return;
+    }
+    try { await document.fonts.load('12px rajdhani'); } catch (ignore) {}
+
+    // The fixture asserts ITS OWN strings first: a frame whose remarks were
+    // quietly shortened would sail through every check below.
+    var radios = [];
+    var says = [];
+    (frame.directives || []).forEach(function (d) {
+      if (d.radio) radios.push(d.radio);
+      if (d.say) says.push(d.say);
+    });
+    var longestRadio = 0;
+    radios.forEach(function (t) { longestRadio = Math.max(longestRadio, runes(t)); });
+    var longestSay = 0;
+    says.forEach(function (t) { longestSay = Math.max(longestSay, runes(t)); });
+    if (radios.length < 7) {
+      fail('the frame carries ' + radios.length + ' radio lines; the worst ' +
+        'case is every seat speaking at once');
+    }
+    if (longestRadio !== CAPS.radio) {
+      fail('the frame\'s longest radio line is ' + longestRadio +
+        ' runes, not the server\'s cap of ' + CAPS.radio);
+    }
+    if (longestSay < CAPS.say - 1) {
+      fail('the frame\'s longest shout is ' + longestSay + ' runes, not ' +
+        CAPS.say);
+    }
+    say('frame: ' + (frame.directives || []).length + ' directive records, ' +
+      radios.length + ' radio lines at up to ' + longestRadio + ' runes, ' +
+      says.length + ' shouts at up to ' + longestSay + ' runes, ' +
+      (frame.eyes || []).length + ' eyes, ' + (frame.roster || []).length +
+      ' roster rows');
+
+    var host = document.getElementById('host');
+    var canvas = document.getElementById('mirror');
+    var ctx = canvas.getContext('2d');
+    var drawn = 0;
+
+    for (var i = 0; i < VIEWS.length; i++) {
+      var view = VIEWS[i];
+      var iframe = document.createElement('iframe');
+      iframe.width = String(view.w);
+      iframe.height = String(view.h);
+      host.appendChild(iframe);
+      var doc = iframe.contentDocument;
+      doc.open();
+      doc.write(shimmed(html));
+      doc.close();
+
+      var win = iframe.contentWindow;
+      var waited = 0;
+      while (!win.__fixtureConfig && waited < 20000) {
+        await sleep(100);
+        waited += 100;
+      }
+      if (!win.__fixtureConfig) {
+        fail('the bundle page never built its core at ' + view.w +
+          'px: the shim never saw createCore');
+        host.removeChild(iframe);
+        continue;
+      }
+      try { await win.document.fonts.ready; } catch (ignore) {}
+      // Two frames: the first hydrates the chrome, the second is the steady
+      // state (the page deduplicates its own feed rows).
+      win.__fixtureConfig.onText(JSON.stringify(frame));
+      await sleep(150);
+      win.__fixtureConfig.onText(JSON.stringify(frame));
+      // Comfortably past the feed's 250 ms entrance animation, so a row is
+      // measured where it lands and not where it slid in from.
+      await sleep(800);
+
+      var entries = collect(win);
+      var lines = report(view, entries);
+      if (entries.length < 8) {
+        fail('at ' + view.w + 'px the page laid out only ' + entries.length +
+          ' text elements — the frame never reached the chrome');
+      }
+      var remarks = entries.filter(function (e) { return e.sentence; }).length;
+      if (remarks < 1) {
+        fail('at ' + view.w + 'px no full-cap remark reached the feed — the ' +
+          'fixture would be measuring nothing');
+      }
+      canvas.width = view.w;
+      canvas.height = view.h;
+      entries.forEach(function (entry) { mirror(ctx, entry); });
+      drawn += lines;
+      check(view, entries);
+      host.removeChild(iframe);
+    }
+
+    say('mirrored ' + drawn + ' laid-out line boxes onto the bounds canvas');
+    if (drawn === 0) fail('nothing was drawn: the fixture measured nothing');
+    if (!failures.length) say('renderer fixture OK', 'ok');
+    finish();
+  }
+
+  main().catch(function (error) {
+    fail('fixture crashed: ' + (error && error.stack || error));
+    finish();
+  });
+})();
+</script>
+</body>
+</html>

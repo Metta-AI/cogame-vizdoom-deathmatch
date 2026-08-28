@@ -4272,6 +4272,21 @@ button.beat-marker {
 /* --- feed rows this game adds ------------------------------------------ */
 .feed-row .dm-frag { color: var(--amber); letter-spacing: 0.08em; }
 .feed-row .dm-radio { color: var(--paper-dim); font-style: italic; }
+/* A model's `radio` line is up to MaxRadioRunes (96) runes, and the row it
+   lands in is the starter's NOWRAP broadcast lower-third. At full cap that
+   sentence wants ~1030 px where the feed column gives it 852 (1280 px board),
+   and ~350 px where it gives 312 (360 px board): the tail was drawn straight
+   past the frame edge, invisible to the load signal and to a screenshot.
+   Measured by tools/ci/renderer_fixture.html, which drives this page with all
+   eight seats at the cap.
+   A remark is a SENTENCE, so it WRAPS inside the feed's own column instead of
+   being ellipsized (checklist item 15: widen the band, do not shorten the
+   text), and #killfeed reserves the two-line height whether or not anyone is
+   speaking, so the scene does not jump when a remark lands. */
+#killfeed .feed-row.dm-radio-row { align-self: stretch; }
+.feed-row .dm-radio { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+#killfeed { min-height: calc(4 * 34 * var(--u)); }
+#stage.tiny #killfeed { min-height: calc(3 * 30 * var(--u)); }
 </style>
 <script>
 (function () {
@@ -4596,10 +4611,13 @@ button.beat-marker {
         continue;
       }
       if (d.radio) {
+        // `dm-radio-row` stretches the row to the feed's own column width so
+        // the remark wraps inside it instead of shrink-to-fitting into a
+        // four-line sliver (or, before that, running off the frame edge).
         feedRow('<span class="who ' + (d.team || '') + '">' +
           CTX.esc(String(d.team || '').toUpperCase()) + ' radio</span>' +
           '<span class="glyph">:</span><span class="dm-radio">' +
-          CTX.esc(d.radio) + '</span>');
+          CTX.esc(d.radio) + '</span>', 'dm-radio-row');
       } else if (d.intent) {
         feedRow('<span class="who ' + (d.team || '') + '">' +
           CTX.esc(d.alias || ('seat ' + d.seat)) + '</span>' +

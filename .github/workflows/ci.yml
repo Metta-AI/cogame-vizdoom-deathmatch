@@ -357,6 +357,41 @@ jobs:
             --soak 10 \
             --strict-text-bounds
 
+      # -----------------------------------------------------------------
+      # The WORST-CASE RENDERER FIXTURE. docker_smoke.sh runs with no
+      # ANTHROPIC_API_KEY, so every seat in the replay above played its
+      # scripted baseline and emitted NO `radio` and NO `say`: the step above
+      # never laid out one character of model-authored text. This one drives
+      # the SAME shipped bundle -- index.html in an iframe, only the wasm
+      # entry shimmed -- with a frame `buildStateJson` itself emitted in which
+      # all eight seats carry a full-cap 96-rune radio line and a full-cap
+      # shout, at 360, 640 and 1280 px, and fails if any of it lands outside
+      # the frame or spills out of the band the layout reserved for it
+      # (cogchemists 2026-08-24).
+      - name: Worst-case renderer fixture (model text at full cap)
+        run: |
+          set -euo pipefail
+          # A COPY of the bundle, so the artifact the release uploads never
+          # carries the fixture.
+          rm -rf dist/fixture-bundle dist/fixture
+          cp -r dist/static-replay-viewer dist/fixture-bundle
+          cp tools/ci/renderer_fixture.html tools/ci/renderer_fixture_frame.json \
+            dist/fixture-bundle/
+          mkdir -p dist/fixture
+          python3 -m http.server 8123 --bind 127.0.0.1 --directory dist/fixture-bundle \
+            > dist/fixture/server.log 2>&1 &
+          server=$!
+          trap 'kill "${server}" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8123/renderer_fixture.html" > /dev/null; then break; fi
+            sleep 1
+          done
+          node tools/ci/viewer_smoke.mjs \
+            --url "http://127.0.0.1:8123/renderer_fixture.html" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out dist/fixture
+
       - name: Upload the viewer smoke evidence
         # Always: the screenshot and the JSON are most useful when the job is red.
         if: always()
@@ -366,6 +401,7 @@ jobs:
           path: |
             viewer-smoke.png
             viewer-smoke.json
+            dist/fixture
           if-no-files-found: warn
           retention-days: 14
 
