@@ -1,4 +1,4 @@
-## The paintball player container: a policy is just a prompt.
+## The vizdoom-deathmatch player container: a policy is just a prompt.
 ##
 ## This process is DELIBERATELY thin. It connects to its seat, sends ONE
 ## Sprite v1 chat message carrying its registration, and then only receives.
@@ -8,14 +8,17 @@
 ## recorded mask log reproducible with no network in the loop.
 ##
 ##   PLAYER_PROMPT        a strategy in plain English -> this seat is an LLM seat
-##   PLAYER_SCRIPTED      holdline | sprayer         -> this seat is scripted
+##   PLAYER_SCRIPTED      rusher | sentry            -> this seat is scripted
 ##   PLAYER_POLICY_LABEL  a free label for the replay's `register` record
 ##
-## A seat that sets neither is `holdline`. To field your own policy, reuse
-## this image and set PLAYER_PROMPT:
+## A seat that sets neither is `rusher` — the server's `parseBaseline` maps
+## everything it does not recognise, the empty string included, to `rusher`,
+## which is also the per-turn fallback. To field your own policy, reuse this
+## image and set PLAYER_PROMPT:
 ##
-##   coworld upload-policy <paintball-image> --name my-paintball \
-##     --run /bin/paintball-player --secret-env PLAYER_PROMPT="<your strategy>"
+##   coworld upload-policy <vizdoom-deathmatch-image> --name my-deathmatch \
+##     --run /bin/vizdoom-deathmatch-player \
+##     --secret-env PLAYER_PROMPT="<your strategy>"
 
 import
   std/[json, options, os, strutils],
@@ -32,7 +35,7 @@ const
 
 proc registrationBlob(prompt, scripted, policy: string): string =
   ## The one registration message. `scripted` is JSON null when the seat is
-  ## an LLM seat, so the server can tell "no baseline named" from "holdline
+  ## an LLM seat, so the server can tell "no baseline named" from "rusher
   ## named explicitly".
   var node = %*{
     "type": "register",
@@ -66,10 +69,10 @@ when isMainModule:
       if explicit.len > 0: explicit
       elif prompt.len > 0: "prompt"
       elif scripted.len > 0: scripted
-      else: "holdline"
-  echo "paintball player: kind=",
+      else: "rusher"
+  echo "vizdoom-deathmatch player: kind=",
     (if prompt.len > 0: "llm" else: "scripted"),
-    " baseline=", (if scripted.len > 0: scripted else: "holdline"),
+    " baseline=", (if scripted.len > 0: scripted else: "rusher"),
     " label=", label
 
   proc dial(attempts: int): WebSocket =
@@ -83,15 +86,15 @@ when isMainModule:
         return newWebSocket(url)
       except CatchableError as error:
         if attempt == 0:
-          echo "paintball player: game not listening yet (", error.msg,
+          echo "vizdoom-deathmatch player: game not listening yet (", error.msg,
             "); retrying"
         sleep(ConnectRetryMs)
     nil
 
   var socket = dial(ConnectAttempts)
   if socket == nil:
-    quit("paintball player: game never accepted a connection", 1)
-  echo "paintball player: connected"
+    quit("vizdoom-deathmatch player: game never accepted a connection", 1)
+  echo "vizdoom-deathmatch player: connected"
 
   # Each session is wrapped: whisky's receiveMessage RAISES on a close frame or
   # a truncated read (only a timeout returns none), and mummy's send only
@@ -126,7 +129,7 @@ when isMainModule:
           socket.send(registrationBlob(prompt, scripted, label), BinaryMessage)
         socket.send(readyBlob(), BinaryMessage)
     except CatchableError as error:
-      echo "paintball player: socket closed (", error.msg, ")"
+      echo "vizdoom-deathmatch player: socket closed (", error.msg, ")"
     # NEVER exit while the game is still serving: a seat that drops keeps its
     # cogs for the whole episode and revives on reconnect, so a dropped socket
     # mid-episode is worth re-dialling and re-registering. Bounded on both
@@ -137,10 +140,10 @@ when isMainModule:
     if sessionFrames == 0 or reconnects >= ReconnectAttempts:
       break
     inc reconnects
-    echo "paintball player: re-dialling the seat (attempt ", reconnects, ")"
+    echo "vizdoom-deathmatch player: re-dialling the seat (attempt ", reconnects, ")"
     socket = dial(ReconnectAttempts)
     if socket == nil:
-      echo "paintball player: game is no longer listening, exiting cleanly"
+      echo "vizdoom-deathmatch player: game is no longer listening, exiting cleanly"
       break
-    echo "paintball player: reconnected, re-registering"
+    echo "vizdoom-deathmatch player: reconnected, re-registering"
   quit(0)
