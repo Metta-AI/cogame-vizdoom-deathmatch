@@ -3555,8 +3555,15 @@ body[data-embed] #board { top: 0; height: 100%; }
         // PAINTBALL: the row is a COG (its anonymous alias), and the columns
         // are tags dealt, tags taken and what its squad painted. Kills and
         // captures are not the score here and never appear as one.
-        var pbMarks = endcardBadge('bs', p.tk, 'Friendly fire — tagged a teammate');
-        var tr = (s.teams || {})[p.team] || {};
+        var pbMarks = endcardBadge('bs', p.tk, 'Friendly fire — killed a teammate');
+        // The five columns the header above emits: Cog | Frags | Deaths |
+        // Net | Acc. `net` and the shot counters ride every roster row
+        // (broadcast.nim's named edit #2); the starter's fourth cell was the
+        // squad's painted-tile count, which is 0 in every deathmatch.
+        var net = (typeof p.net === 'number')
+          ? p.net : (p.k || 0) - (p.tk || 0) - (p.d || 0);
+        var acc = (p.sf || 0) > 0
+          ? Math.round(100 * (p.sh || 0) / p.sf) + '%' : '—';
         return '<div class="ec-row' + (mvp ? ' mvp' : '') + '">' +
           '<span class="pcell">' +
           '<span class="pname">' + esc(p.alias || shortName(rosterName(s, p.s))) + '</span>' +
@@ -3564,7 +3571,8 @@ body[data-embed] #board { top: 0; height: 100%; }
           '</span>' +
           '<span class="n">' + (p.k || 0) + '</span>' +
           '<span class="n">' + (p.d || 0) + '</span>' +
-          '<span class="n clstr">' + (tr.paint || 0) + '</span>' +
+          '<span class="n">' + (net > 0 ? '+' : '') + net + '</span>' +
+          '<span class="n">' + acc + '</span>' +
           '</div>';
       }
       var marks = endcardBadge('bs', p.tk, 'Backstab — killed a teammate');
