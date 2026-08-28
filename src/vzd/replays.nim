@@ -408,9 +408,16 @@ proc applyReplayEvents(replay: var ReplayPlayer, sim: var SimServer) =
     # applying them here would move the hash chain. Everything else is a
     # cog's real in-game shout, hashed state both sides hear. Classic games
     # keep the unconditional apply: every recorded chat there IS a shout.
+    #
+    # The `stop` record is the exception: it is LOAD-BEARING state (the
+    # wall-clock stop and the two fault rules), applied through the SAME proc
+    # the server applies it with, so a `deadline` or `fault` replay ends its
+    # game at the recorded tick instead of running out of data with the sim
+    # still Playing.
     if sim.config.numAgents > 0 and
         chat.message.len > 0 and chat.message[0] == '{':
-      sim.pushFeedDirective(chat.message)
+      if not sim.applyStopRecord(chat.message):
+        sim.pushFeedDirective(chat.message)
     else:
       sim.applyShout(int(chat.player), chat.message)
     inc replay.chatIndex

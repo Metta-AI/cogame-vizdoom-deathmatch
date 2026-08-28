@@ -1423,16 +1423,15 @@ proc runServerLoop*(
       # LOAD-BEARING `stop` record, not inferred, because a wall-clock fact
       # cannot be re-derived from sim state (particle-worlds, 2026-08-26).
       deadlineHit = true
-      sim.endReason = ReasonDeadline
-      sim.endRule = EndRuleWallClock
       sim.stopDetail = "wall-clock budget of " &
         $config.wallClockBudgetSeconds & "s reached at tick " & $sim.tickCount
-      let leader = sim.deathmatchLeader()
       echo "wall-clock budget of ", config.wallClockBudgetSeconds,
         "s reached; settling the episode from the frag counters at this tick"
-      replayWriter.writeChat(tickTime(sim.tickCount), 0,
-        $(%*{"k": "stop", "tick": sim.tickCount, "endRule": EndRuleWallClock}))
-      sim.finishGame(leader.team, isDraw = leader.draw)
+      let stopRecord = stopRecordJson(sim.tickCount, EndRuleWallClock)
+      replayWriter.writeChat(tickTime(sim.tickCount), 0, stopRecord)
+      ## The SAME proc on record and on playback: `endReason`, `endRule` and
+      ## `finishGame` all happen inside `applyStopRecord`.
+      sim.applyStopRecord(stopRecord)
       quitAfterFrame = true
 
     {.gcsafe.}:
@@ -2062,14 +2061,12 @@ proc runServerLoop*(
           sim.stopDetail = error.msg
           faultRule = EndRuleHostError
         if faultRule.len > 0:
-          sim.endReason = ReasonFault
-          sim.endRule = faultRule
-          sim.phase = GameOver
           ## The load-bearing `stop` record, applied by the SAME proc on
           ## record and on playback for every end reason — not just the
           ## healthy one (particle-worlds 13c66d7, 2026-08-26).
-          replayWriter.writeChat(tickTime(sim.tickCount), 0,
-            $(%*{"k": "stop", "tick": sim.tickCount, "endRule": faultRule}))
+          let stopRecord = stopRecordJson(sim.tickCount, faultRule)
+          replayWriter.writeChat(tickTime(sim.tickCount), 0, stopRecord)
+          sim.applyStopRecord(stopRecord)
           quitAfterFrame = true
           break
         if sim.collectEvents:

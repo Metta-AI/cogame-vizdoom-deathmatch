@@ -3398,6 +3398,51 @@ proc checkWinCondition*(sim: var SimServer) {.measure.} =
   elif aliveCount == 0:
     sim.finishGame(Red, isDraw = true)
 
+proc stopRecordJson*(tick: int, endRule: string): string =
+  ## The load-bearing `stop` record's wire form. One writer, so the record the
+  ## server writes and the record `applyStopRecord` parses cannot drift.
+  $(%*{"k": "stop", "tick": tick, "endRule": endRule})
+
+proc applyStopRecord*(sim: var SimServer, record: string): bool {.discardable.} =
+  ## Applies one `stop` record — the wall-clock stop and the two fault rules —
+  ## and reports whether it was one.
+  ##
+  ## THE SAME PROC ON RECORD AND ON PLAYBACK (design note §Replay, the
+  ## particle-worlds 2026-08-26 scar): a wall-clock fact cannot be re-derived
+  ## from sim state, so the server writes it into the chat stream and both
+  ## sides end the game through here. Without this, a `deadline` or `fault`
+  ## replay re-derives its masks up to the stop tick and then simply runs out
+  ## of data: the sim never enters GameOver, so the `gameover` event and the
+  ## endcard never fire in playback.
+  if record.len == 0 or record[0] != '{':
+    return false
+  var node: JsonNode
+  try:
+    node = parseJson(record)
+  except CatchableError:
+    return false
+  if node.kind != JObject or node{"k"}.getStr() != "stop":
+    return false
+  let rule = node{"endRule"}.getStr()
+  case rule
+  of EndRuleWallClock:
+    ## Settled from the frag counters at THIS tick, exactly as the server
+    ## settles it, so the margin is over the ticks actually played.
+    sim.endReason = ReasonDeadline
+    sim.endRule = EndRuleWallClock
+    let leader = sim.deathmatchLeader()
+    sim.finishGame(leader.team, isDraw = leader.draw)
+    return true
+  of EndRuleSimFault, EndRuleHostError:
+    ## A fault is nobody's win: the phase moves, no reward is awarded, and
+    ## `playerResultsJson`'s fault branch scores both sides 0.500.
+    sim.endReason = ReasonFault
+    sim.endRule = rule
+    sim.phase = GameOver
+    return true
+  else:
+    return false
+
 proc checkDeathmatchEnd*(sim: var SimServer) =
   ## The ONLY end rule the SIM itself can reach: full time.
   ##
