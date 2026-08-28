@@ -48,8 +48,8 @@ type
       ## tick clock are offset by it so the shown timeline is 0 = first action.
     leadSeries*: seq[seq[int]]
       ## [tick, leadPerTeam…] change-points across the WHOLE match/episode
-      ## (one value per team, in Team order): remaining LIVES for classic
-      ## games, CUMULATIVE HILL TICKS for KotH games (scanTeamLead).
+      ## (one value per team, in Team order): CUMULATIVE NET FRAGS for a
+      ## deathmatch, CUMULATIVE HILL TICKS for KotH games (scanTeamLead).
       ## Precomputed on the deterministic keyframe walk so the momentum graph
       ## can draw its full-timeline shape all at once (not accumulate as it
       ## plays). Only points where some team's value CHANGES are stored
@@ -566,7 +566,12 @@ proc scanTeamLead(sim: SimServer): seq[int] =
   ## One lead value per team, in Team order — the metric the momentum graph
   ## plots the difference of.
   ##
-  ## Classic: the team's remaining lives, as always.
+  ## DEATHMATCH (this game, hill off): the team's CUMULATIVE NET FRAGS —
+  ## `teamNet`, the same counter the scorebug, the endcard and `results`
+  ## read. The starter plotted remaining LIVES here, which with `lives: 60`
+  ## is `deaths(other) - deaths(you)`: a graph that ignores every frag and
+  ## moves only on deaths, under a label that reads FRAG LEAD. The design
+  ## note asks for the cumulative frag margin, and this is it.
   ##
   ## KotH (hill on): the CUMULATIVE hill-tick count — the archived totals of
   ## the games already finished plus this game's running count. With
@@ -581,7 +586,7 @@ proc scanTeamLead(sim: SimServer): seq[int] =
       result.add(total)
   else:
     for team in sim.teams():
-      result.add(sim.teamLivesRemaining(team))
+      result.add(sim.teamNet(team))
 
 proc scanSeriesPoint(tick: int, lead: seq[int]): seq[int] =
   ## One [tick, leadPerTeam…] change-point of the momentum series.
