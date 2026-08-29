@@ -12,6 +12,7 @@ const RepoDir = currentSourcePath.parentDir.parentDir
 let
   chromeCommon = readFile(RepoDir / "client" / "chrome_common.js")
   page = readFile(RepoDir / "client" / "replay_broadcast.html")
+  league = readFile(RepoDir / "client" / "league_replayer.html")
   core = readFile(RepoDir / "client" / "broadcast_core.js")
   banner = "<!-- ============================================================\n" &
     "     VIZDOOM-DEATHMATCH additions to the inherited coworld-ctf chrome"
@@ -19,14 +20,19 @@ let
 suite "chrome provenance":
   test "chrome_common.js is the starter's file, at its exact byte length":
     ## coworld-ctf ships 40 022 bytes. This fork copies it and changes exactly
-    ## TWO lines — the module-path comment and `window.CTF_WIRE` ->
-    ## `window.VZD_WIRE`, which is the identifier tools/gen_wire_constants.nim
-    ## actually emits — so the length is unchanged and the sha is pinned here.
-    check chromeCommon.len == 40022
+    ## FOUR lines — the module-path comment, `window.CTF_WIRE` ->
+    ## `window.VZD_WIRE` (the identifier tools/gen_wire_constants.nim actually
+    ## emits), and the two lines of the fleet-wide 0.5x transport patch (the
+    ## SPEEDS fallback and the speed->command map) — so the length is 15 bytes
+    ## longer than the starter's and the sha is pinned here.
+    check chromeCommon.len == 40037
     check ($secureHash(chromeCommon)).toLowerAscii() ==
-      "833a6d61b0785241feb5cbb22372d106fe8d9295"
+      "84daa5a781f0ab28301d02dacc0fcb0d2b93faeb"
     check "window.VZD_WIRE" in chromeCommon
     check "window.CTF_WIRE" notin chromeCommon
+    ## The 1/2x chip is built from the engine's speed list and sends '5'.
+    check "[0.5, 1, 2, 3, 4, 8, 16]" in chromeCommon
+    check "0.5: '5'" in chromeCommon
     ## The alias block is untouched, which is what the dm- prefix protects.
     check "var markBeat = C.markBeat" in chromeCommon or
       "markBeat" in chromeCommon
@@ -100,6 +106,23 @@ suite "the transport band is inviolate":
     for gone in ["steal", "return", "capture", "hillflip", "tagout"]:
       checkpoint(gone)
       check (".beat-marker." & gone) notin page
+
+suite "Space pauses on every shipped page":
+  ## Dockerfile.replay-viewer ships exactly two HTML pages: index.html (the
+  ## board, from replay_broadcast.html) and league.html (the shell, from
+  ## league_replayer.html). keydown never crosses the iframe boundary, so the
+  ## shell cannot rely on the board's own binding — it has to forward Space
+  ## down the command channel it already uses for the play button.
+  test "the board page binds Space to play/pause directly":
+    check "if (k === ' ') { ev.preventDefault(); togglePlay(); }" in page
+    check "function togglePlay() { send(' '); }" in page
+
+  test "the league shell forwards Space down the command channel":
+    check "else if(ev.key===' '){ ev.preventDefault(); sendCmd(' '); }" in
+      league
+    ## Same channel the play button uses, so the board sees one command.
+    check "$('btn-play').addEventListener('click',    function(){ sendCmd(' '); });" in
+      league
 
 suite "#viewpanel is gone: this is a FIXED arena":
   test "the zoom bar, the minimap and their wiring are removed":

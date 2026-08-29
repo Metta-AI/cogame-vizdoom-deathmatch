@@ -133,7 +133,7 @@ when isMainModule:
   echo game.buildStateJson(
     newJArray(),
     playing = true,
-    speed = 1,
+    speed = 1.0,
     maxTick = 1080,
     looping = true,
     transportEnabled = true,
