@@ -136,7 +136,7 @@ suite "vision and the depth strip":
       let narrow = sim.marchRays(cogIndex, EgoRayColumns, sim.visionRange())
       check narrow.len == EgoRayColumns
       let state = parseJson(sim.buildStateJson(
-        newJArray(), true, 1, 1080, false, true, -1,
+        newJArray(), true, 1.0, 1080, false, true, -1,
         sim.players[cogIndex].joinOrder))
       check state.hasKey("fp")
       let cols = state["fp"]["cols"]

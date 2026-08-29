@@ -11,7 +11,7 @@
 
 import
   std/[json, os, strutils, tables, unicode, unittest],
-  vzd/[replay_runtime, replays],
+  vzd/[replay_runtime, replays, wire_constants],
   vzd_helpers
 
 const RepoDir = currentSourcePath.parentDir.parentDir
@@ -320,3 +320,38 @@ suite "record then re-derive, every end reason":
     check back.phase == GameOver
     check back.endRule == EndRuleSimFault
     removeFile(path)
+
+suite "the 1/2x playback speed":
+  ## The fleet-wide half speed: command '5' selects ReplayHalfSpeedIndex, the
+  ## chrome shows 0.5, and the step budget spends one sim tick every OTHER
+  ## frame (halfPhase parity) outside a fast-forwarded lull.
+  test "'5' selects a crawl the chrome reports as 0.5":
+    var replay = ReplayPlayer()
+    replay.speedIndex = 0
+    applySpeedCommand(replay.speedIndex, '5')
+    check replay.speedIndex == ReplayHalfSpeedIndex
+    check replay.replayDisplaySpeed() == 0.5
+    ## The integer speed clamps to 1x, which is what the live loop and the
+    ## board's transport sprite read.
+    check replay.replaySpeed() == 1
+
+  test "a tick is spent every other frame":
+    var replay = ReplayPlayer()
+    replay.speedIndex = ReplayHalfSpeedIndex
+    replay.skipLulls = false
+    replay.halfPhase = false
+    check replay.replayStepBudget(0) == 0
+    replay.halfPhase = true
+    check replay.replayStepBudget(0) == 1
+
+  test "'-' floors at 1/2x and '+' climbs back out of it":
+    var speedIndex = 0
+    applySpeedCommand(speedIndex, '-')
+    check speedIndex == ReplayHalfSpeedIndex
+    applySpeedCommand(speedIndex, '-')
+    check speedIndex == ReplayHalfSpeedIndex
+    applySpeedCommand(speedIndex, '+')
+    check speedIndex == 0
+
+  test "the wire constants offer 0.5 ahead of the engine's speeds":
+    check WireConstantsJs.startsWith("window.VZD_WIRE={speeds:[0.5,1,")
