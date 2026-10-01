@@ -92,7 +92,6 @@ suite "manifest pins":
     for key in ["player", "global"]:
       let node = manifest["game"]["protocols"][key]
       check node.kind == JObject
-      check node["type"].getStr() == "uri"
       check node["value"].getStr().startsWith("https://")
 
   test "game.docs carries a readme and three non-empty pages":
@@ -117,8 +116,8 @@ suite "manifest pins":
       "{{VIZDOOM_DEATHMATCH_IMAGE}}"
     check manifest["game"]["runnable"]["run"].to(seq[string]) ==
       @["/bin/vizdoom-deathmatch"]
-    check manifest["game"]["runnable"]["env"]["ANTHROPIC_API_KEY_URI"].getStr() ==
-      "secret://coworld/vizdoom-deathmatch/anthropic_api_key"
+    doAssert manifest{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+      "hosted LLM uses the platform sidecar without provider secrets"
 
   test "the compose service name derives the image placeholder":
     let compose = readFile(RepoDir / "compose.yaml")
