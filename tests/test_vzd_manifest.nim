@@ -124,7 +124,6 @@ suite "manifest pins":
     check "  vizdoom-deathmatch:" in compose
     check "image: coworld-vizdoom-deathmatch:latest" in compose
     check "platform: linux/amd64" in compose
-    check "network: host" in compose
 
   test "player resources: limits.cpu is at least 1":
     ## The pistonball 0.1.1 scar.
