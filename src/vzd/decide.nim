@@ -52,18 +52,14 @@ type
     mapSent*: seq[bool]        ## per seat: the map has been published once.
     rejected*: seq[int]        ## per seat: replies whose `at` resolved to
                                ## nothing; mirrored into results.ordersRejected.
-    requestTicks*: seq[MonoTime]
-                               ## a rolling 60 s request log. If issuing the
-                               ## next batch would push the trailing minute
-                               ## past RateCapPerMin, the seats that would
-                               ## exceed it skip the call and take the rusher
-                               ## order with cause `rate_guard`. Bounded,
-                               ## logged, never a sleep on the critical path.
+    requestTicks*: seq[seq[MonoTime]] ## trailing-minute requests for each player slot
+
 
 proc initDecisionEngine*(sim: SimServer): DecisionEngine =
   result.client = newLlmClient(sim.config)
   result.ctl = initControlState(sim)
   result.seats = newSeq[SeatPolicy](sim.seatCount())
+  result.requestTicks = newSeq[seq[MonoTime]](sim.seatCount())
   result.directives = newSeq[SquadDirective](sim.seatCount())
   result.haveDirective = newSeq[bool](sim.seatCount())
   result.lastResult = newSeq[string](sim.seatCount())
@@ -279,20 +275,12 @@ proc rusherFor*(
     DefaultBaselineParams, engine.standingDirective(seat))
 
 proc effectiveSpacingMs*(configured, llmSeats: int): int =
-  ## THE NAMED EDIT to the rate floor. The Bedrock sidecar caps 30 requests a
-  ## minute PER EPISODE and eight seats in one batch is eight requests, so a
-  ## FLAT floor between batch starts is not enough on its own: the floor
-  ## actually used is derived from the number of seats being called.
-  ##
-  ##   effectiveSpacingMs(n) = max(turnSpacingMs, ceil(60000 * n / RateCap))
-  ##
-  ## so n = 2 gives the configured 5 s (the league shape: two prompt champions
-  ## among six scripted fillers) and n = 8 gives 17_143 ms — 24 turns of which
-  ## is 411 s, still inside the 660 s engine stop.
+  ## The native sidecar limits each player slot separately. Reserve room for
+  ## both attempts; adding opponents must not reduce a player's request rate.
   if llmSeats <= 0:
     return max(0, configured)
-  max(max(0, configured),
-      (60_000 * llmSeats + RateCapPerMin - 1) div RateCapPerMin)
+  max(max(0, configured), (120_000 + RateCapPerMin - 1) div RateCapPerMin)
+
 
 proc repairMissingOrder*(
   engine: DecisionEngine, sim: SimServer, seat: int,
@@ -349,23 +337,22 @@ proc visibleAliases(
           result.ys.add(sim.players[i].y + CollisionH div 2)
         break
 
-proc noteRequests(engine: var DecisionEngine, count: int) =
-  ## Logs `count` requests into the rolling 60 s window and drops the rows
-  ## that have aged out.
+proc noteRequests(engine: var DecisionEngine, seats: openArray[int]) =
   let now = getMonoTime()
-  var kept: seq[MonoTime]
-  for stamp in engine.requestTicks:
-    if (now - stamp).inMilliseconds.int < 60_000:
-      kept.add(stamp)
-  for _ in 0 ..< count:
+  for seat in seats:
+    var kept: seq[MonoTime]
+    for stamp in engine.requestTicks[seat]:
+      if (now - stamp).inMilliseconds.int < 60_000:
+        kept.add(stamp)
     kept.add(now)
-  engine.requestTicks = kept
+    engine.requestTicks[seat] = kept
 
-proc trailingRequests(engine: DecisionEngine): int =
+proc trailingRequests(engine: DecisionEngine, seat: int): int =
   let now = getMonoTime()
-  for stamp in engine.requestTicks:
+  for stamp in engine.requestTicks[seat]:
     if (now - stamp).inMilliseconds.int < 60_000:
       inc result
+
 
 proc turn*(
   engine: var DecisionEngine,
@@ -383,7 +370,6 @@ proc turn*(
   let
     game = sim.gameIndex + 1
     budget = initDuration(milliseconds = max(1, sim.config.turnBudgetMs))
-    turnStart = getMonoTime()
   ## Throttle state is PER TURN: a daily-token 429 on turn k says nothing
   ## about turn k+1 (the sidecar's window may have rolled), so the flag is
   ## cleared here and only suppresses this turn's retry.
@@ -432,18 +418,12 @@ proc turn*(
   var
     open: seq[int]
     rateBlocked: seq[int]
-  let headroom = max(0, RateCapPerMin - engine.trailingRequests())
+    failureCauses = newSeq[string](engine.seats.len)
   for seat in 0 ..< engine.seats.len:
     if engine.seats[seat].isLlm and not engine.llmOff and
         not engine.client.disabled:
-      if open.len < headroom:
-        open.add(seat)
-      else:
-        ## THE RATE GUARD. Issuing this call would push the trailing 60 s
-        ## count past the sidecar's cap, so the seat skips it for this turn
-        ## and takes the rusher order. Bounded, logged, and never a sleep on
-        ## the critical path.
-        rateBlocked.add(seat)
+      failureCauses[seat] = "no_credentials"
+      open.add(seat)
     elif engine.seats[seat].isLlm:
       # An LLM seat that CANNOT call the LLM this turn is a fallback, not a
       # scripted policy, and the design's `fallback.cause` enum names both
@@ -465,17 +445,6 @@ proc turn*(
       directive.source = dsScripted
       engine.directives[seat] = directive
       engine.haveDirective[seat] = true
-
-  for seat in rateBlocked:
-    var directive = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
-    directive.source = dsFallback
-    engine.directives[seat] = directive
-    engine.haveDirective[seat] = true
-    result.add(fallbackRecord(game, turnIndex, seat, 1, "rate_guard",
-      "the trailing-minute request cap would be exceeded; playing rusher"))
-    sim.emitEvent(Fallback, source = seat, weapon = "rate_guard")
-    echo "vizdoom-deathmatch llm: seat ", seat,
-      " falling back to rusher (rate_guard) on turn ", turnIndex
 
   # --- the rate floor -------------------------------------------------------
   # Hold the START of consecutive batches `spacingMs` apart. The cert fixture
@@ -503,6 +472,8 @@ proc turn*(
     if seat < engine.mapSent.len:
       engine.mapSent[seat] = true
 
+  # Spacing is outside the call budget. Each attempt is still bounded below.
+  let turnStart = getMonoTime()
   # --- up to two PARALLEL batches ------------------------------------------
   var attempt = 0
   while open.len > 0 and attempt < 2:
@@ -510,9 +481,20 @@ proc turn*(
       break
     if getMonoTime() - turnStart >= budget:
       for seat in open:
+        failureCauses[seat] = "timeout"
         result.add(fallbackRecord(
           game, turnIndex, seat, attempt + 1, "timeout",
           "per-turn budget exhausted before attempt " & $(attempt + 1)))
+      break
+    var eligible: seq[int]
+    for seat in open:
+      if engine.trailingRequests(seat) < RateCapPerMin:
+        eligible.add(seat)
+      else:
+        failureCauses[seat] = "rate_guard"
+        rateBlocked.add(seat)
+    open = eligible
+    if open.len == 0:
       break
     let deadlineMs =
       if attempt == 0: sim.config.attempt1Ms else: sim.config.retryMs
@@ -525,7 +507,7 @@ proc turn*(
       let request = engine.client.requestFor(
         SystemPrompt, userMessage(engine.seats[seat].prompt, user), seat)
       batch.post(request.url, request.headers, request.body, $seat)
-    engine.noteRequests(open.len)
+    engine.noteRequests(open)
     let started = getMonoTime()
     # curly hands the deadline to CURLOPT_TIMEOUT, whose granularity is WHOLE
     # SECONDS, so this conversion FLOORS — and a config that is not a whole
@@ -570,10 +552,13 @@ proc turn*(
         if responses[position].error.len > 0:
           cause = (if "timeout" in responses[position].error.toLowerAscii():
                      "timeout" else: "transport_error")
+        elif responses[position].response.code in [401, 403]:
+          cause = "no_credentials"
         elif error.msg.startsWith("llm throttled"):
           ## Name the throttle for what it is. Reporting a 429 as
           ## `parse_error` is what made the hosted log unreadable.
           cause = "throttled"
+        failureCauses[seat] = cause
         result.add(fallbackRecord(
           game, turnIndex, seat, attempt + 1, cause, error.msg))
         echo "vizdoom-deathmatch llm: seat ", seat, " attempt ", attempt + 1,
@@ -590,17 +575,12 @@ proc turn*(
       break
 
   # --- anything still open plays rusher for this turn -----------------------
-  for seat in open:
+  for seat in open & rateBlocked:
     var directive = engine.rusherFor(sim, sim.commandedCogs(seat), seat)
     directive.source = dsFallback
     engine.directives[seat] = directive
     engine.haveDirective[seat] = true
-    let cause =
-      if engine.client.disabled or engine.client.transport == ltNone:
-        "no_credentials"
-      elif engine.llmOff: "budget_guard"
-      elif engine.client.throttled: "throttled"
-      else: "parse_error"
+    let cause = failureCauses[seat]
     result.add(fallbackRecord(game, turnIndex, seat, 2, cause,
       "seat fell back to the rusher order"))
     sim.emitEvent(Fallback, source = seat, weapon = cause)

@@ -63,16 +63,15 @@ calls would multiply the wall clock by eight for nothing.
 ```
 attempt1Ms                          8.0 s
 retryMs                             3.0 s
-turnBudgetMs                       12.0 s   (monotonic deadline around the turn)
+turnBudgetMs                       12.0 s   (call budget, after spacing)
 turnSpacingMs (configured floor)    5.0 s
-effectiveSpacingMs(n) = max(turnSpacingMs, ceil(60000 * n / 28))
-                                 -> 5.0 s at 2 LLM seats, 17.143 s at 8
+effectiveSpacingMs(n) = max(turnSpacingMs, ceil(120000 / 28)) for n > 0
+                                 -> 5.0 s at both 2 and 8 LLM seats
 wallClockBudgetSeconds            660   s   (engine hard stop -> "deadline")
 ```
 
-A rolling 60-second request counter backs the floor up: if issuing the next
-batch would push the trailing minute above 28 requests, the seats that would
-exceed it skip the call for that turn and take the `rusher` order with
+Each player slot has a separate rolling 60-second request counter. Before each
+attempt, a seat already at 28 requests skips the call and takes the `rusher` order with
 `cause = "rate_guard"`. Bounded, logged, never a sleep on the critical path.
 
 ## Endpoints

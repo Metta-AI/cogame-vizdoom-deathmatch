@@ -542,7 +542,7 @@ const
   MaxReplyBytes* = 4096         ## bytes read from the provider before parsing.
   LeadThrottleTicks* = 48       ## min ticks between two `lead` announcements.
   DecisiveMargin* = 12          ## net-frag margin that scores a maximum win.
-  RateCapPerMin* = 28           ## the sidecar caps 30 req/min per episode;
+  RateCapPerMin* = 28           ## the sidecar caps 30 req/min per player slot;
                                 ## the rate floor is derived from this with
                                 ## two spare.
   MaxSeatCount* = 8             ## `num_agents` is pinned at 8 in every shipped
