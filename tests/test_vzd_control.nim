@@ -319,17 +319,17 @@ suite "the rusher shouts on the change, not every turn":
     check resumed.orders[0].say == "on it"
 
 suite "the derived rate floor and the budget guard":
-  test "effectiveSpacingMs is 5000 at 2 seats and 17143 at 8":
+  test "effectiveSpacingMs reserves retries independently of seat count":
     check effectiveSpacingMs(5000, 0) == 5000
     check effectiveSpacingMs(5000, 1) == 5000
     check effectiveSpacingMs(5000, 2) == 5000
-    check effectiveSpacingMs(5000, 8) == 17_143
-    check effectiveSpacingMs(0, 8) == 17_143
+    check effectiveSpacingMs(5000, 8) == 5000
+    check effectiveSpacingMs(0, 8) == 4286
     ## 24 turns at the worst-case floor still fits inside the engine stop.
     check 24 * effectiveSpacingMs(5000, 8) div 1000 + 134 <= 660
 
   test "the guard compares against the LARGER of the budget and the floor":
     ## The named edit: the starter compared against turnBudgetMs alone, which
     ## under-counts whenever the rate floor is bigger.
-    check effectiveSpacingMs(5000, 8) > 12_000
-    check max(12_000, effectiveSpacingMs(5000, 8)) == 17_143
+    check effectiveSpacingMs(20_000, 8) > 12_000
+    check max(12_000, effectiveSpacingMs(20_000, 8)) == 20_000
